@@ -28,6 +28,7 @@ DEBUG = True
 ALLOWED_HOSTS = []
 
 
+AUTH_USER_MODEL = 'users.User'
 # Application definition
 
 INSTALLED_APPS = [
@@ -83,7 +84,7 @@ WSGI_APPLICATION = 'Insight_invest.wsgi.application'
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.postgresql',
-        'NAME': 'insightDB',
+        'NAME': 'insightdb',
         'USER': 'postgres',
         'PASSWORD':'root',
         'HOST':'localhost',

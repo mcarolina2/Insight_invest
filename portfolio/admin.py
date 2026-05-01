@@ -1,3 +1,6 @@
 from django.contrib import admin
+from portfolio.models import Ativo, Carteira, Posicao
 
-# Register your models here.
+admin.site.register(Ativo)
+admin.site.register(Carteira)
+admin.site.register(Posicao)
