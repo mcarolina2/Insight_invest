@@ -26,6 +26,7 @@ class Ativo(models.Model):
     descricao    = models.TextField(blank=True)
     ativo        = models.BooleanField(default=True)
     atualizado_em = models.DateTimeField(auto_now=True)
+    cnpj = models.CharField(max_length=18, null=True, blank=True, unique=True)
  
     def __str__(self):
         return f"{self.ticker} — {self.nome}"
