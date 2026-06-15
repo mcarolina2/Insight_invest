@@ -16,7 +16,9 @@ Including another URLconf
 """
 from django.contrib import admin
 from django.urls import path
+from scoring.views import carteira_view
 
 urlpatterns = [
     path('admin/', admin.site.urls),
+    path("carteira/", carteira_view, name="carteira"),
 ]
