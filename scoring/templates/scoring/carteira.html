@@ -1,0 +1,632 @@
+<!DOCTYPE html>
+
+<html lang="pt-BR"><head>
+<meta charset="UTF-8">
+<style>
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=Space+Grotesk:wght@400;500;600;700&display=swap');
+
+:root{
+  --bg:#0f1117;--surface:#181c27;--surface2:#1e2336;--border:#2a3050;
+  --text:#e8eaf6;--muted:#6b7280;--accent:#6c63ff;
+  --green:#22c55e;--amber:#f59e0b;--red:#ef4444;--blue:#3b82f6;
+  --conservador:#22c55e;--intermediario:#6c63ff;--arrojado:#f59e0b;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;min-height:100vh;padding:20px}
+
+h1{font-family:'Space Grotesk',sans-serif;font-size:22px;font-weight:700;letter-spacing:-.5px}
+.subtitle{color:var(--muted);font-size:13px;margin-top:2px}
+
+.header{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:24px;flex-wrap:wrap;gap:12px}
+.perfil-tabs{display:flex;gap:6px}
+.ptab{font-size:12px;padding:5px 14px;border-radius:20px;border:1px solid var(--border);background:transparent;cursor:pointer;color:var(--muted);font-family:'DM Sans',sans-serif;transition:all .2s}
+.ptab.active-c{background:#052e16;color:var(--conservador);border-color:var(--conservador)}
+.ptab.active-i{background:#1e1b4b;color:var(--accent);border-color:var(--accent)}
+.ptab.active-a{background:#1c1004;color:var(--amber);border-color:var(--amber)}
+
+/* FILTROS */
+.filtros-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:20px}
+@media(max-width:600px){.filtros-grid{grid-template-columns:1fr}}
+.filtro-card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px}
+.filtro-label{font-size:11px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin-bottom:10px}
+.filtro-opts{display:flex;gap:6px;flex-wrap:wrap}
+.fopt{font-size:12px;padding:5px 12px;border-radius:8px;border:1px solid var(--border);background:transparent;cursor:pointer;color:var(--muted);transition:all .15s;font-family:'DM Sans',sans-serif}
+.fopt:hover{border-color:var(--accent);color:var(--text)}
+.fopt.sel-baixo{background:#052e16;color:var(--green);border-color:var(--green)}
+.fopt.sel-medio{background:#1e1b4b;color:var(--accent);border-color:var(--accent)}
+.fopt.sel-alto {background:#1c1004;color:var(--amber);border-color:var(--amber)}
+.fopt.sel-setor{background:#1e2336;color:var(--blue);border-color:var(--blue)}
+
+/* MÉTRICAS */
+.metricas-row{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:20px}
+@media(max-width:600px){.metricas-row{grid-template-columns:repeat(2,1fr)}}
+.mcard{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px}
+.mcard .ml{font-size:11px;color:var(--muted);margin-bottom:4px;text-transform:uppercase;letter-spacing:.06em}
+.mcard .mv{font-size:20px;font-weight:600}
+.mv.green{color:var(--green)}.mv.amber{color:var(--amber)}.mv.red{color:var(--red)}.mv.blue{color:var(--blue)}
+
+/* MODELO BADGE */
+.modelo-info{background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:8px 14px;font-size:12px;color:var(--muted);margin-bottom:16px;display:flex;align-items:center;gap:8px}
+.modelo-badge{padding:2px 10px;border-radius:20px;font-size:11px;font-weight:600}
+.mb-markowitz{background:#1e1b4b;color:var(--accent)}
+.mb-sharpe    {background:#052e16;color:var(--green)}
+.mb-rp        {background:#1c1004;color:var(--amber)}
+.mb-score     {background:#0c1a2e;color:var(--blue)}
+
+/* GRID PRINCIPAL */
+.main-grid{display:grid;grid-template-columns:260px 1fr;gap:16px}
+@media(max-width:700px){.main-grid{grid-template-columns:1fr}}
+
+/* PIZZA */
+.pie-card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px}
+.pie-title{font-size:13px;font-weight:600;margin-bottom:14px;font-family:'Space Grotesk',sans-serif}
+.pie-wrap{position:relative;margin-bottom:16px}
+canvas{display:block;margin:0 auto}
+.pie-center{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);text-align:center;pointer-events:none}
+.pie-center .pct{font-size:22px;font-weight:700;font-family:'Space Grotesk',sans-serif}
+.pie-center .lbl{font-size:10px;color:var(--muted)}
+.leg-list{display:flex;flex-direction:column;gap:6px}
+.leg-row{display:flex;align-items:center;gap:8px;font-size:12px;cursor:pointer;padding:2px 4px;border-radius:4px;transition:background .15s}
+.leg-row:hover{background:var(--surface2)}
+.leg-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+.leg-t{font-weight:500;flex:1}
+.leg-p{color:var(--muted);font-size:11px}
+
+/* TABELA */
+.table-card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px;overflow:auto}
+.table-title{font-size:13px;font-weight:600;margin-bottom:14px;font-family:'Space Grotesk',sans-serif;display:flex;align-items:center;justify-content:space-between}
+.btn-gerar{font-size:12px;padding:5px 14px;border-radius:8px;border:none;background:var(--accent);color:#fff;cursor:pointer;font-family:'DM Sans',sans-serif;transition:opacity .15s}
+.btn-gerar:hover{opacity:.85}
+.btn-gerar:disabled{opacity:.4;cursor:not-allowed}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{text-align:left;font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;padding:0 8px 10px}
+td{padding:9px 8px;border-top:1px solid var(--border);vertical-align:middle}
+tr:hover td{background:var(--surface2)}
+.ticker-cell{font-weight:600;font-family:'Space Grotesk',sans-serif}
+.bar-wrap{width:80px}
+.bar-bg{height:5px;background:var(--border);border-radius:3px}
+.bar-fill{height:5px;border-radius:3px;transition:width .5s cubic-bezier(.4,0,.2,1)}
+.badge-tipo{font-size:10px;padding:2px 8px;border-radius:20px;font-weight:600}
+.bt-c{background:#052e16;color:var(--green)}
+.bt-m{background:#1e1b4b;color:var(--accent)}
+.bt-v{background:#1f0e0e;color:var(--red)}
+.bt-o{background:#1c1004;color:var(--amber)}
+.score-ring{display:inline-flex;align-items:center;justify-content:center;width:32px;height:32px;border-radius:50%;border:2px solid;font-size:11px;font-weight:700}
+.loading-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);align-items:center;justify-content:center;z-index:100;font-size:14px;color:var(--text)}
+.spinner{width:24px;height:24px;border:3px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .7s linear infinite;margin-right:10px}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* FRONTEIRA */
+.fronteira-card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px;margin-top:16px}
+.fronteira-title{font-size:13px;font-weight:600;margin-bottom:12px;font-family:'Space Grotesk',sans-serif}
+
+/* LOADING */
+.shimmer{animation:shimmer 1.5s infinite;background:linear-gradient(90deg,var(--surface) 25%,var(--surface2) 50%,var(--surface) 75%);background-size:200% 100%;border-radius:4px}
+@keyframes shimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div>
+    <h1>📈 Carteira Otimizada — Markowitz</h1>
+    <div class="subtitle">Ajuste os filtros e veja a composição ideal pelo modelo selecionado</div>
+  </div>
+  <div class="perfil-tabs">
+    <button class="ptab" onclick="setPerfil('conservador',this)">🛡 Conservador</button>
+    <button class="ptab active-i" onclick="setPerfil('intermediario',this)">⚖ Intermediário</button>
+    <button class="ptab" onclick="setPerfil('arrojado',this)">🚀 Arrojado</button>
+  </div>
+</div>
+
+<!-- FILTROS -->
+<div class="filtros-grid">
+  <div class="filtro-card">
+    <div class="filtro-label">🎯 Tolerância ao Risco</div>
+    <div class="filtro-opts" id="f-risco">
+      <button class="fopt sel-baixo" data-val="baixo" onclick="setFiltro('risco','baixo',this)">Baixo</button>
+      <button class="fopt sel-medio" data-val="medio" onclick="setFiltro('risco','medio',this)">Médio</button>
+      <button class="fopt" data-val="alto" onclick="setFiltro('risco','alto',this)">Alto</button>
+    </div>
+  </div>
+  <div class="filtro-card">
+    <div class="filtro-label">📈 Retorno Esperado</div>
+    <div class="filtro-opts" id="f-retorno">
+      <button class="fopt" data-val="baixo" onclick="setFiltro('retorno','baixo',this)">Baixo (~8%)</button>
+      <button class="fopt sel-medio" data-val="medio" onclick="setFiltro('retorno','medio',this)">Médio (~14%)</button>
+      <button class="fopt" data-val="alto" onclick="setFiltro('retorno','alto',this)">Alto (~22%)</button>
+    </div>
+  </div>
+  <div class="filtro-card">
+    <div class="filtro-label">🏭 Setor</div>
+    <div class="filtro-opts" id="f-setor">
+      <button class="fopt sel-setor" data-val="todos" onclick="setFiltro('setor','todos',this)">Todos</button>
+      <button class="fopt" data-val="Financeiro" onclick="setFiltro('setor','Financeiro',this)">Financeiro</button>
+      <button class="fopt" data-val="Energia" onclick="setFiltro('setor','Energia',this)">Energia</button>
+      <button class="fopt" data-val="Industrial" onclick="setFiltro('setor','Industrial',this)">Industrial</button>
+    </div>
+  </div>
+</div>
+
+<!-- MÉTRICAS -->
+<div class="metricas-row">
+  <div class="mcard"><div class="ml">Retorno Est. (a.a.)</div><div class="mv green" id="m-ret">+14%</div></div>
+  <div class="mcard"><div class="ml">Volatilidade (a.a.)</div><div class="mv amber" id="m-vol">16%</div></div>
+  <div class="mcard"><div class="ml">Índice Sharpe</div><div class="mv blue" id="m-sharpe">0.64</div></div>
+  <div class="mcard"><div class="ml">VaR 95% (diário)</div><div class="mv red" id="m-var">-1%</div></div>
+</div>
+
+<!-- MODELO USADO -->
+<div class="modelo-info" id="modelo-info">
+  <span>Modelo:</span>
+  <span class="modelo-badge mb-sharpe" id="modelo-badge">Máximo Sharpe</span>
+  <span style="flex:1"></span>
+  <span id="modelo-desc" style="color:var(--muted);font-size:11px">Maximiza o retorno por unidade de risco</span>
+</div>
+
+<!-- GRID: pizza + tabela -->
+<div class="main-grid">
+  <div class="pie-card">
+    <div class="pie-title">Alocação</div>
+    <div class="pie-wrap">
+      <canvas id="pie" width="200" height="200"></canvas>
+      <div class="pie-center"><div class="pct" id="pie-qtd">7</div><div class="lbl">ativos</div></div>
+    </div>
+    <div class="leg-list" id="legend">
+    <div class="leg-row" onmouseenter="hover(0,[{'t':'WEGE3','s':'Industrial','pct':20,'score':72,'tipo':'comprar'},{'t':'VALE3','s':'Mineração','pct':18,'score':70,'tipo':'comprar'},{'t':'ITUB4','s':'Financeiro','pct':16,'score':68,'tipo':'manter'},{'t':'PETR4','s':'Energia','pct':15,'score':66,'tipo':'manter'},{'t':'BBAS3','s':'Financeiro','pct':14,'score':65,'tipo':'manter'},{'t':'EGIE3','s':'Energia','pct':10,'score':63,'tipo':'manter'},{'t':'HYPE3','s':'Saúde','pct':7,'score':61,'tipo':'observar'}])" onmouseleave="hover(-1,[{'t':'WEGE3','s':'Industrial','pct':20,'score':72,'tipo':'comprar'},{'t':'VALE3','s':'Mineração','pct':18,'score':70,'tipo':'comprar'},{'t':'ITUB4','s':'Financeiro','pct':16,'score':68,'tipo':'manter'},{'t':'PETR4','s':'Energia','pct':15,'score':66,'tipo':'manter'},{'t':'BBAS3','s':'Financeiro','pct':14,'score':65,'tipo':'manter'},{'t':'EGIE3','s':'Energia','pct':10,'score':63,'tipo':'manter'},{'t':'HYPE3','s':'Saúde','pct':7,'score':61,'tipo':'observar'}])">
+      <div class="leg-dot" style="background:#6c63ff"></div>
+      <span class="leg-t">WEGE3</span>
+      <span class="leg-p">20%</span>
+    </div>
+    <div class="leg-row" onmouseenter="hover(1,[{'t':'WEGE3','s':'Industrial','pct':20,'score':72,'tipo':'comprar'},{'t':'VALE3','s':'Mineração','pct':18,'score':70,'tipo':'comprar'},{'t':'ITUB4','s':'Financeiro','pct':16,'score':68,'tipo':'manter'},{'t':'PETR4','s':'Energia','pct':15,'score':66,'tipo':'manter'},{'t':'BBAS3','s':'Financeiro','pct':14,'score':65,'tipo':'manter'},{'t':'EGIE3','s':'Energia','pct':10,'score':63,'tipo':'manter'},{'t':'HYPE3','s':'Saúde','pct':7,'score':61,'tipo':'observar'}])" onmouseleave="hover(-1,[{'t':'WEGE3','s':'Industrial','pct':20,'score':72,'tipo':'comprar'},{'t':'VALE3','s':'Mineração','pct':18,'score':70,'tipo':'comprar'},{'t':'ITUB4','s':'Financeiro','pct':16,'score':68,'tipo':'manter'},{'t':'PETR4','s':'Energia','pct':15,'score':66,'tipo':'manter'},{'t':'BBAS3','s':'Financeiro','pct':14,'score':65,'tipo':'manter'},{'t':'EGIE3','s':'Energia','pct':10,'score':63,'tipo':'manter'},{'t':'HYPE3','s':'Saúde','pct':7,'score':61,'tipo':'observar'}])">
+      <div class="leg-dot" style="background:#22c55e"></div>
+      <span class="leg-t">VALE3</span>
+      <span class="leg-p">18%</span>
+    </div>
+    <div class="leg-row" onmouseenter="hover(2,[{'t':'WEGE3','s':'Industrial','pct':20,'score':72,'tipo':'comprar'},{'t':'VALE3','s':'Mineração','pct':18,'score':70,'tipo':'comprar'},{'t':'ITUB4','s':'Financeiro','pct':16,'score':68,'tipo':'manter'},{'t':'PETR4','s':'Energia','pct':15,'score':66,'tipo':'manter'},{'t':'BBAS3','s':'Financeiro','pct':14,'score':65,'tipo':'manter'},{'t':'EGIE3','s':'Energia','pct':10,'score':63,'tipo':'manter'},{'t':'HYPE3','s':'Saúde','pct':7,'score':61,'tipo':'observar'}])" onmouseleave="hover(-1,[{'t':'WEGE3','s':'Industrial','pct':20,'score':72,'tipo':'comprar'},{'t':'VALE3','s':'Mineração','pct':18,'score':70,'tipo':'comprar'},{'t':'ITUB4','s':'Financeiro','pct':16,'score':68,'tipo':'manter'},{'t':'PETR4','s':'Energia','pct':15,'score':66,'tipo':'manter'},{'t':'BBAS3','s':'Financeiro','pct':14,'score':65,'tipo':'manter'},{'t':'EGIE3','s':'Energia','pct':10,'score':63,'tipo':'manter'},{'t':'HYPE3','s':'Saúde','pct':7,'score':61,'tipo':'observar'}])">
+      <div class="leg-dot" style="background:#f59e0b"></div>
+      <span class="leg-t">ITUB4</span>
+      <span class="leg-p">16%</span>
+    </div>
+    <div class="leg-row" onmouseenter="hover(3,[{'t':'WEGE3','s':'Industrial','pct':20,'score':72,'tipo':'comprar'},{'t':'VALE3','s':'Mineração','pct':18,'score':70,'tipo':'comprar'},{'t':'ITUB4','s':'Financeiro','pct':16,'score':68,'tipo':'manter'},{'t':'PETR4','s':'Energia','pct':15,'score':66,'tipo':'manter'},{'t':'BBAS3','s':'Financeiro','pct':14,'score':65,'tipo':'manter'},{'t':'EGIE3','s':'Energia','pct':10,'score':63,'tipo':'manter'},{'t':'HYPE3','s':'Saúde','pct':7,'score':61,'tipo':'observar'}])" onmouseleave="hover(-1,[{'t':'WEGE3','s':'Industrial','pct':20,'score':72,'tipo':'comprar'},{'t':'VALE3','s':'Mineração','pct':18,'score':70,'tipo':'comprar'},{'t':'ITUB4','s':'Financeiro','pct':16,'score':68,'tipo':'manter'},{'t':'PETR4','s':'Energia','pct':15,'score':66,'tipo':'manter'},{'t':'BBAS3','s':'Financeiro','pct':14,'score':65,'tipo':'manter'},{'t':'EGIE3','s':'Energia','pct':10,'score':63,'tipo':'manter'},{'t':'HYPE3','s':'Saúde','pct':7,'score':61,'tipo':'observar'}])">
+      <div class="leg-dot" style="background:#3b82f6"></div>
+      <span class="leg-t">PETR4</span>
+      <span class="leg-p">15%</span>
+    </div>
+    <div class="leg-row" onmouseenter="hover(4,[{'t':'WEGE3','s':'Industrial','pct':20,'score':72,'tipo':'comprar'},{'t':'VALE3','s':'Mineração','pct':18,'score':70,'tipo':'comprar'},{'t':'ITUB4','s':'Financeiro','pct':16,'score':68,'tipo':'manter'},{'t':'PETR4','s':'Energia','pct':15,'score':66,'tipo':'manter'},{'t':'BBAS3','s':'Financeiro','pct':14,'score':65,'tipo':'manter'},{'t':'EGIE3','s':'Energia','pct':10,'score':63,'tipo':'manter'},{'t':'HYPE3','s':'Saúde','pct':7,'score':61,'tipo':'observar'}])" onmouseleave="hover(-1,[{'t':'WEGE3','s':'Industrial','pct':20,'score':72,'tipo':'comprar'},{'t':'VALE3','s':'Mineração','pct':18,'score':70,'tipo':'comprar'},{'t':'ITUB4','s':'Financeiro','pct':16,'score':68,'tipo':'manter'},{'t':'PETR4','s':'Energia','pct':15,'score':66,'tipo':'manter'},{'t':'BBAS3','s':'Financeiro','pct':14,'score':65,'tipo':'manter'},{'t':'EGIE3','s':'Energia','pct':10,'score':63,'tipo':'manter'},{'t':'HYPE3','s':'Saúde','pct':7,'score':61,'tipo':'observar'}])">
+      <div class="leg-dot" style="background:#ef4444"></div>
+      <span class="leg-t">BBAS3</span>
+      <span class="leg-p">14%</span>
+    </div>
+    <div class="leg-row" onmouseenter="hover(5,[{'t':'WEGE3','s':'Industrial','pct':20,'score':72,'tipo':'comprar'},{'t':'VALE3','s':'Mineração','pct':18,'score':70,'tipo':'comprar'},{'t':'ITUB4','s':'Financeiro','pct':16,'score':68,'tipo':'manter'},{'t':'PETR4','s':'Energia','pct':15,'score':66,'tipo':'manter'},{'t':'BBAS3','s':'Financeiro','pct':14,'score':65,'tipo':'manter'},{'t':'EGIE3','s':'Energia','pct':10,'score':63,'tipo':'manter'},{'t':'HYPE3','s':'Saúde','pct':7,'score':61,'tipo':'observar'}])" onmouseleave="hover(-1,[{'t':'WEGE3','s':'Industrial','pct':20,'score':72,'tipo':'comprar'},{'t':'VALE3','s':'Mineração','pct':18,'score':70,'tipo':'comprar'},{'t':'ITUB4','s':'Financeiro','pct':16,'score':68,'tipo':'manter'},{'t':'PETR4','s':'Energia','pct':15,'score':66,'tipo':'manter'},{'t':'BBAS3','s':'Financeiro','pct':14,'score':65,'tipo':'manter'},{'t':'EGIE3','s':'Energia','pct':10,'score':63,'tipo':'manter'},{'t':'HYPE3','s':'Saúde','pct':7,'score':61,'tipo':'observar'}])">
+      <div class="leg-dot" style="background:#ec4899"></div>
+      <span class="leg-t">EGIE3</span>
+      <span class="leg-p">10%</span>
+    </div>
+    <div class="leg-row" onmouseenter="hover(6,[{'t':'WEGE3','s':'Industrial','pct':20,'score':72,'tipo':'comprar'},{'t':'VALE3','s':'Mineração','pct':18,'score':70,'tipo':'comprar'},{'t':'ITUB4','s':'Financeiro','pct':16,'score':68,'tipo':'manter'},{'t':'PETR4','s':'Energia','pct':15,'score':66,'tipo':'manter'},{'t':'BBAS3','s':'Financeiro','pct':14,'score':65,'tipo':'manter'},{'t':'EGIE3','s':'Energia','pct':10,'score':63,'tipo':'manter'},{'t':'HYPE3','s':'Saúde','pct':7,'score':61,'tipo':'observar'}])" onmouseleave="hover(-1,[{'t':'WEGE3','s':'Industrial','pct':20,'score':72,'tipo':'comprar'},{'t':'VALE3','s':'Mineração','pct':18,'score':70,'tipo':'comprar'},{'t':'ITUB4','s':'Financeiro','pct':16,'score':68,'tipo':'manter'},{'t':'PETR4','s':'Energia','pct':15,'score':66,'tipo':'manter'},{'t':'BBAS3','s':'Financeiro','pct':14,'score':65,'tipo':'manter'},{'t':'EGIE3','s':'Energia','pct':10,'score':63,'tipo':'manter'},{'t':'HYPE3','s':'Saúde','pct':7,'score':61,'tipo':'observar'}])">
+      <div class="leg-dot" style="background:#14b8a6"></div>
+      <span class="leg-t">HYPE3</span>
+      <span class="leg-p">7%</span>
+    </div></div>
+  </div>
+
+  <div class="table-card">
+    <div class="table-title">
+      Composição da Carteira
+      <button class="btn-gerar" id="btn-otimizar" onclick="otimizar()">⚡ Otimizar</button>
+    </div>
+    <table>
+      <thead>
+        <tr>
+          <th>Ticker</th><th>Setor</th><th>Alocação</th>
+          <th>Score</th><th>Ação</th>
+        </tr>
+      </thead>
+      <tbody id="tbody"><tr>
+      <td class="ticker-cell" style="color:#6c63ff">WEGE3</td>
+      <td style="color:var(--muted);font-size:12px">Industrial</td>
+      <td>
+        <div style="display:flex;align-items:center;gap:8px">
+          <div class="bar-wrap"><div class="bar-bg"><div class="bar-fill" style="width:100%;background:#6c63ff"></div></div></div>
+          <span style="font-weight:600;font-size:13px">20%</span>
+        </div>
+      </td>
+      <td>
+        <div class="score-ring" style="color:var(--green);border-color:var(--green)">72</div>
+      </td>
+      <td><span class="badge-tipo bt-c">Comprar</span></td>
+    </tr><tr>
+      <td class="ticker-cell" style="color:#22c55e">VALE3</td>
+      <td style="color:var(--muted);font-size:12px">Mineração</td>
+      <td>
+        <div style="display:flex;align-items:center;gap:8px">
+          <div class="bar-wrap"><div class="bar-bg"><div class="bar-fill" style="width:90%;background:#22c55e"></div></div></div>
+          <span style="font-weight:600;font-size:13px">18%</span>
+        </div>
+      </td>
+      <td>
+        <div class="score-ring" style="color:var(--green);border-color:var(--green)">70</div>
+      </td>
+      <td><span class="badge-tipo bt-c">Comprar</span></td>
+    </tr><tr>
+      <td class="ticker-cell" style="color:#f59e0b">ITUB4</td>
+      <td style="color:var(--muted);font-size:12px">Financeiro</td>
+      <td>
+        <div style="display:flex;align-items:center;gap:8px">
+          <div class="bar-wrap"><div class="bar-bg"><div class="bar-fill" style="width:80%;background:#f59e0b"></div></div></div>
+          <span style="font-weight:600;font-size:13px">16%</span>
+        </div>
+      </td>
+      <td>
+        <div class="score-ring" style="color:var(--green);border-color:var(--green)">68</div>
+      </td>
+      <td><span class="badge-tipo bt-m">Manter</span></td>
+    </tr><tr>
+      <td class="ticker-cell" style="color:#3b82f6">PETR4</td>
+      <td style="color:var(--muted);font-size:12px">Energia</td>
+      <td>
+        <div style="display:flex;align-items:center;gap:8px">
+          <div class="bar-wrap"><div class="bar-bg"><div class="bar-fill" style="width:75%;background:#3b82f6"></div></div></div>
+          <span style="font-weight:600;font-size:13px">15%</span>
+        </div>
+      </td>
+      <td>
+        <div class="score-ring" style="color:var(--green);border-color:var(--green)">66</div>
+      </td>
+      <td><span class="badge-tipo bt-m">Manter</span></td>
+    </tr><tr>
+      <td class="ticker-cell" style="color:#ef4444">BBAS3</td>
+      <td style="color:var(--muted);font-size:12px">Financeiro</td>
+      <td>
+        <div style="display:flex;align-items:center;gap:8px">
+          <div class="bar-wrap"><div class="bar-bg"><div class="bar-fill" style="width:70%;background:#ef4444"></div></div></div>
+          <span style="font-weight:600;font-size:13px">14%</span>
+        </div>
+      </td>
+      <td>
+        <div class="score-ring" style="color:var(--green);border-color:var(--green)">65</div>
+      </td>
+      <td><span class="badge-tipo bt-m">Manter</span></td>
+    </tr><tr>
+      <td class="ticker-cell" style="color:#ec4899">EGIE3</td>
+      <td style="color:var(--muted);font-size:12px">Energia</td>
+      <td>
+        <div style="display:flex;align-items:center;gap:8px">
+          <div class="bar-wrap"><div class="bar-bg"><div class="bar-fill" style="width:50%;background:#ec4899"></div></div></div>
+          <span style="font-weight:600;font-size:13px">10%</span>
+        </div>
+      </td>
+      <td>
+        <div class="score-ring" style="color:var(--accent);border-color:var(--accent)">63</div>
+      </td>
+      <td><span class="badge-tipo bt-m">Manter</span></td>
+    </tr><tr>
+      <td class="ticker-cell" style="color:#14b8a6">HYPE3</td>
+      <td style="color:var(--muted);font-size:12px">Saúde</td>
+      <td>
+        <div style="display:flex;align-items:center;gap:8px">
+          <div class="bar-wrap"><div class="bar-bg"><div class="bar-fill" style="width:35%;background:#14b8a6"></div></div></div>
+          <span style="font-weight:600;font-size:13px">7%</span>
+        </div>
+      </td>
+      <td>
+        <div class="score-ring" style="color:var(--accent);border-color:var(--accent)">61</div>
+      </td>
+      <td><span class="badge-tipo bt-o">Observar</span></td>
+    </tr></tbody>
+    </table>
+  </div>
+</div>
+
+<!-- FRONTEIRA EFICIENTE -->
+<div class="fronteira-card">
+  <div class="fronteira-title">Fronteira Eficiente de Markowitz — Risco × Retorno</div>
+  <canvas id="fronteira" width="640" height="180"></canvas>
+</div>
+
+<div class="loading-overlay" id="loading">
+  <div class="spinner"></div> Calculando Markowitz...
+</div>
+
+<script>
+const PALETA = ['#6c63ff','#22c55e','#f59e0b','#3b82f6','#ef4444','#ec4899',
+                '#14b8a6','#8b5cf6','#f97316','#06b6d4','#84cc16','#a855f7'];
+
+// ── Estado ────────────────────────────────────────────────────
+let estado = {
+  perfil:  'intermediario',
+  risco:   'medio',
+  retorno: 'medio',
+  setor:   'todos',
+};
+
+// ── Dados simulados (em prod: vêm do endpoint AJAX) ───────────
+const DADOS_SIMULADOS = {
+  conservador: {
+    baixo_baixo:  { ret:.082, vol:.109, sharpe:.43, var:-.009, modelo:'risk_parity',
+      ativos:[{t:'ITUB4',s:'Financeiro',pct:16,score:68,tipo:'manter'},
+              {t:'BBAS3',s:'Financeiro',pct:15,score:66,tipo:'manter'},
+              {t:'WEGE3',s:'Industrial',pct:14,score:72,tipo:'comprar'},
+              {t:'EGIE3',s:'Energia',   pct:14,score:65,tipo:'manter'},
+              {t:'FLRY3',s:'Saúde',     pct:13,score:63,tipo:'manter'},
+              {t:'CIEL3',s:'Financeiro',pct:13,score:61,tipo:'manter'},
+              {t:'DOHL3',s:'Têxtil',    pct:8, score:59,tipo:'observar'},
+              {t:'METI3',s:'Metalurgia',pct:7, score:57,tipo:'observar'}]},
+    baixo_medio: { ret:.124, vol:.138, sharpe:.58, var:-.012, modelo:'markowitz',
+      ativos:[{t:'WEGE3',s:'Industrial',pct:20,score:72,tipo:'comprar'},
+              {t:'ITUB4',s:'Financeiro',pct:18,score:68,tipo:'manter'},
+              {t:'BBAS3',s:'Financeiro',pct:15,score:66,tipo:'manter'},
+              {t:'EGIE3',s:'Energia',   pct:14,score:65,tipo:'manter'},
+              {t:'FLRY3',s:'Saúde',     pct:13,score:63,tipo:'manter'},
+              {t:'HYPE3',s:'Saúde',     pct:12,score:62,tipo:'manter'},
+              {t:'CIEL3',s:'Financeiro',pct:8, score:61,tipo:'observar'}]},
+    medio_medio: { ret:.141, vol:.162, sharpe:.64, var:-.014, modelo:'sharpe',
+      ativos:[{t:'WEGE3',s:'Industrial',pct:20,score:72,tipo:'comprar'},
+              {t:'VALE3',s:'Mineração', pct:18,score:70,tipo:'comprar'},
+              {t:'ITUB4',s:'Financeiro',pct:16,score:68,tipo:'manter'},
+              {t:'PETR4',s:'Energia',   pct:15,score:66,tipo:'manter'},
+              {t:'BBAS3',s:'Financeiro',pct:14,score:65,tipo:'manter'},
+              {t:'EGIE3',s:'Energia',   pct:10,score:63,tipo:'manter'},
+              {t:'HYPE3',s:'Saúde',     pct:7, score:61,tipo:'observar'}]},
+    alto_alto:   { ret:.198, vol:.228, sharpe:.71, var:-.020, modelo:'score',
+      ativos:[{t:'VALE3',s:'Mineração', pct:20,score:72,tipo:'comprar'},
+              {t:'PETR4',s:'Energia',   pct:20,score:70,tipo:'comprar'},
+              {t:'WEGE3',s:'Industrial',pct:18,score:68,tipo:'comprar'},
+              {t:'EMBR3',s:'Aeronáut.', pct:14,score:66,tipo:'comprar'},
+              {t:'PRIO3',s:'Energia',   pct:12,score:64,tipo:'comprar'},
+              {t:'BBAS3',s:'Financeiro',pct:10,score:62,tipo:'manter'},
+              {t:'CYRE3',s:'Construção',pct:6, score:60,tipo:'observar'}]},
+  }
+};
+
+function getDados(){
+  const k = `${estado.risco}_${estado.retorno}`;
+  const base = DADOS_SIMULADOS.conservador;
+  return base[k] || base['medio_medio'];
+}
+
+// ── Filtros ───────────────────────────────────────────────────
+function setPerfil(p, btn){
+  estado.perfil = p;
+  document.querySelectorAll('.ptab').forEach(b => b.className='ptab');
+  const cls = {conservador:'active-c',intermediario:'active-i',arrojado:'active-a'};
+  btn.classList.add(cls[p]);
+  aplicar();
+}
+
+function setFiltro(tipo, val, btn){
+  estado[tipo] = val;
+  const grupo = document.getElementById(`f-${tipo}`);
+  grupo.querySelectorAll('.fopt').forEach(b=>{
+    b.className='fopt';
+    if(b.dataset.val===val){
+      if(tipo==='setor') b.classList.add('sel-setor');
+      else b.classList.add(`sel-${val}`);
+    }
+  });
+  aplicar();
+}
+
+// ── Aplicar filtros e re-renderizar ───────────────────────────
+function aplicar(){
+  const d = getDados();
+  atualizarMetricas(d);
+  atualizarModelo(d.modelo);
+  renderPie(d.ativos);
+  renderTabela(d.ativos);
+  renderFronteira(d);
+}
+
+function atualizarMetricas(d){
+  const fmt = v => v >= 0 ? '+'+Math.round(v*100)+'%' : Math.round(v*100)+'%';
+  document.getElementById('m-ret').textContent    = fmt(d.ret);
+  document.getElementById('m-vol').textContent    = Math.round(d.vol*100)+'%';
+  document.getElementById('m-sharpe').textContent = d.sharpe.toFixed(2);
+  document.getElementById('m-var').textContent    = fmt(d.var);
+}
+
+const MODELO_INFO = {
+  markowitz:   {label:'Mínima Variância',  cls:'mb-markowitz', desc:'Minimiza o risco para o retorno alvo definido'},
+  sharpe:      {label:'Máximo Sharpe',     cls:'mb-sharpe',    desc:'Maximiza o retorno por unidade de risco'},
+  risk_parity: {label:'Risk Parity',       cls:'mb-rp',        desc:'Cada ativo contribui igualmente ao risco total'},
+  score:       {label:'Score-Weighted',    cls:'mb-score',     desc:'Alocação proporcional ao score do Insight Invest'},
+};
+
+function atualizarModelo(m){
+  const info = MODELO_INFO[m] || MODELO_INFO.sharpe;
+  const badge = document.getElementById('modelo-badge');
+  badge.textContent  = info.label;
+  badge.className    = 'modelo-badge ' + info.cls;
+  document.getElementById('modelo-desc').textContent = info.desc;
+}
+
+// ── Gráfico de pizza ──────────────────────────────────────────
+let hoverIdx = -1;
+
+function renderPie(ativos){
+  const c = document.getElementById('pie');
+  const ctx = c.getContext('2d');
+  ctx.clearRect(0,0,200,200);
+
+  let start = -Math.PI/2;
+  ativos.forEach((a,i)=>{
+    const slice = a.pct/100 * Math.PI*2;
+    const expand = hoverIdx===i ? 6 : 0;
+    const cx = 100 + (expand?Math.cos(start+slice/2)*expand:0);
+    const cy = 100 + (expand?Math.sin(start+slice/2)*expand:0);
+    ctx.beginPath();
+    ctx.moveTo(cx,cy);
+    ctx.arc(cx,cy,78,start,start+slice);
+    ctx.closePath();
+    ctx.fillStyle = PALETA[i%PALETA.length];
+    ctx.fill();
+    ctx.strokeStyle = '#0f1117';
+    ctx.lineWidth   = 2;
+    ctx.stroke();
+
+    // Rótulo percentual
+    if(a.pct >= 8){
+      const mid = start + slice/2;
+      const lx  = cx + Math.cos(mid)*52;
+      const ly  = cy + Math.sin(mid)*52;
+      ctx.fillStyle = '#fff';
+      ctx.font      = '600 10px DM Sans';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(a.pct+'%', lx, ly);
+    }
+    start += slice;
+  });
+
+  // Centro
+  ctx.beginPath();
+  ctx.arc(100,100,36,0,Math.PI*2);
+  ctx.fillStyle = '#181c27';
+  ctx.fill();
+  document.getElementById('pie-qtd').textContent = ativos.length;
+
+  // Legenda
+  const leg = document.getElementById('legend');
+  leg.innerHTML = ativos.map((a,i)=>`
+    <div class="leg-row" onmouseenter="hover(${i},${JSON.stringify(ativos).replace(/"/g,"'")})"
+         onmouseleave="hover(-1,${JSON.stringify(ativos).replace(/"/g,"'")})">
+      <div class="leg-dot" style="background:${PALETA[i%PALETA.length]}"></div>
+      <span class="leg-t">${a.t}</span>
+      <span class="leg-p">${a.pct}%</span>
+    </div>`).join('');
+}
+
+function hover(idx, ativos){
+  hoverIdx = idx;
+  renderPie(ativos);
+}
+
+// ── Tabela ────────────────────────────────────────────────────
+function renderTabela(ativos){
+  const max = Math.max(...ativos.map(a=>a.pct));
+  const tipoCls = {comprar:'bt-c',manter:'bt-m',vender:'bt-v',observar:'bt-o'};
+  const tpLabel = {comprar:'Comprar',manter:'Manter',vender:'Vender',observar:'Observar'};
+
+  document.getElementById('tbody').innerHTML = ativos.map((a,i)=>{
+    const cor = PALETA[i%PALETA.length];
+    const sc  = a.score;
+    const scCor = sc>=65?'var(--green)':sc>=50?'var(--accent)':'var(--amber)';
+    return `<tr>
+      <td class="ticker-cell" style="color:${cor}">${a.t}</td>
+      <td style="color:var(--muted);font-size:12px">${a.s}</td>
+      <td>
+        <div style="display:flex;align-items:center;gap:8px">
+          <div class="bar-wrap"><div class="bar-bg"><div class="bar-fill" style="width:${(a.pct/max*100).toFixed(0)}%;background:${cor}"></div></div></div>
+          <span style="font-weight:600;font-size:13px">${a.pct}%</span>
+        </div>
+      </td>
+      <td>
+        <div class="score-ring" style="color:${scCor};border-color:${scCor}">${sc}</div>
+      </td>
+      <td><span class="badge-tipo ${tipoCls[a.tipo]||'bt-m'}">${tpLabel[a.tipo]||a.tipo}</span></td>
+    </tr>`;
+  }).join('');
+}
+
+// ── Fronteira Eficiente ───────────────────────────────────────
+function renderFronteira(d){
+  const c = document.getElementById('fronteira');
+  const W = c.width, H = c.height;
+  const ctx = c.getContext('2d');
+  ctx.clearRect(0,0,W,H);
+
+  const PAD = {t:20,r:20,b:30,l:50};
+  const gW  = W - PAD.l - PAD.r;
+  const gH  = H - PAD.t - PAD.b;
+
+  // Gera pontos da fronteira (simulado)
+  const pts = [];
+  for(let i=0;i<=20;i++){
+    const t   = i/20;
+    const vol = 0.08 + t*0.22;
+    const ret = 0.04 + Math.sqrt(t)*0.22 + (Math.random()-.5)*0.01;
+    pts.push({vol,ret});
+  }
+  pts.sort((a,b)=>a.vol-b.vol);
+
+  const vMin=.06, vMax=.34, rMin=.02, rMax=.30;
+  const px = v => PAD.l + (v-vMin)/(vMax-vMin)*gW;
+  const py = r => PAD.t + (1-(r-rMin)/(rMax-rMin))*gH;
+
+  // Gradiente de fundo
+  const grad = ctx.createLinearGradient(PAD.l,0,PAD.l+gW,0);
+  grad.addColorStop(0,'rgba(34,197,94,.08)');
+  grad.addColorStop(1,'rgba(239,68,68,.08)');
+  ctx.fillStyle = grad;
+  ctx.beginPath();
+  ctx.moveTo(PAD.l,PAD.t+gH);
+  pts.forEach(p=>ctx.lineTo(px(p.vol),py(p.ret)));
+  ctx.lineTo(PAD.l+gW,PAD.t+gH);
+  ctx.closePath();
+  ctx.fill();
+
+  // Curva
+  ctx.beginPath();
+  ctx.strokeStyle = '#6c63ff';
+  ctx.lineWidth   = 2;
+  ctx.moveTo(px(pts[0].vol),py(pts[0].ret));
+  pts.forEach(p=>ctx.lineTo(px(p.vol),py(p.ret)));
+  ctx.stroke();
+
+  // Ponto atual
+  ctx.beginPath();
+  ctx.arc(px(d.vol),py(d.ret),7,0,Math.PI*2);
+  ctx.fillStyle   = '#fff';
+  ctx.fill();
+  ctx.strokeStyle = '#6c63ff';
+  ctx.lineWidth   = 2.5;
+  ctx.stroke();
+
+  ctx.fillStyle = '#fff';
+  ctx.font      = 'bold 11px DM Sans';
+  ctx.fillText('Sua carteira', px(d.vol)+10, py(d.ret)-6);
+  ctx.fillStyle = 'var(--muted)';
+  ctx.font      = '10px DM Sans';
+  ctx.fillText(`Ret ${(d.ret*100).toFixed(0)}% | Vol ${(d.vol*100).toFixed(0)}%`, px(d.vol)+10, py(d.ret)+8);
+
+  // Eixos
+  ctx.strokeStyle = '#2a3050';
+  ctx.lineWidth   = 1;
+  ctx.beginPath();
+  ctx.moveTo(PAD.l,PAD.t); ctx.lineTo(PAD.l,PAD.t+gH);
+  ctx.moveTo(PAD.l,PAD.t+gH); ctx.lineTo(PAD.l+gW,PAD.t+gH);
+  ctx.stroke();
+
+  ctx.fillStyle = '#6b7280';
+  ctx.font      = '10px DM Sans';
+  ctx.textAlign = 'center';
+  ctx.fillText('Risco (Volatilidade)',PAD.l+gW/2,H-4);
+  ctx.save();
+  ctx.translate(12,PAD.t+gH/2);
+  ctx.rotate(-Math.PI/2);
+  ctx.fillText('Retorno Esperado',0,0);
+  ctx.restore();
+}
+
+// ── Botão Otimizar (simula chamada AJAX) ──────────────────────
+function otimizar(){
+  const btn = document.getElementById('btn-otimizar');
+  btn.disabled = true;
+  btn.textContent = '⏳ Calculando...';
+  document.getElementById('loading').style.display = 'flex';
+
+  // Em produção: fetch('/scoring/otimizar/', {method:'POST', body: JSON.stringify(estado), ...})
+  setTimeout(()=>{
+    aplicar();
+    btn.disabled = false;
+    btn.textContent = '⚡ Otimizar';
+    document.getElementById('loading').style.display = 'none';
+  }, 1200);
+}
+
+// ── Init ──────────────────────────────────────────────────────
+aplicar();
+</script>
+
+
+</body></html>

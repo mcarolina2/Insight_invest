@@ -128,3 +128,8 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/6.0/howto/static-files/
 
 STATIC_URL = 'static/'
+
+# Insight_invest/settings.py
+LOGIN_URL      = '/login/'        # onde redirecionar quem não está logado
+LOGIN_REDIRECT_URL = '/carteira/' # para onde ir após fazer login
+LOGOUT_REDIRECT_URL = '/login/'   # para onde ir após logout

@@ -16,9 +16,12 @@ Including another URLconf
 """
 from django.contrib import admin
 from django.urls import path
-from scoring.views import carteira_view
+from django.urls import path, include  
+from scoring.views import carteira_view, otimizar_ajax
 
 urlpatterns = [
-    path('admin/', admin.site.urls),
+    path('admin/',              admin.site.urls),
+    path('',                    include('users.urls')),
     path("carteira/", carteira_view, name="carteira"),
+    path('carteira/otimizar/', otimizar_ajax,  name='otimizar'),
 ]
