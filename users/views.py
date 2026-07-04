@@ -1,8 +1,5 @@
-from django.shortcuts import render
-
-# Create your views here.
 """
-users/views.py — todas as views necessárias para o fluxo de login/quiz/perfil
+users/views.py — com rastreamento do perfil sugerido pela carteira coringa.
 """
 
 from django.contrib.auth import authenticate, login, logout
@@ -10,27 +7,24 @@ from django.contrib.auth.decorators import login_required
 from django.shortcuts import redirect, render
 
 
-# ──────────────────────────────────────────────────────────────
-# Helpers
-# ──────────────────────────────────────────────────────────────
-
 def _precisa_quiz(user):
     return user.perfil_risco is None
 
 
-def _redirecionar_pos_login(user):
+def _redirecionar_pos_login(user, request=None):
     if _precisa_quiz(user):
         return redirect('users:quiz')
     return redirect('carteira')
 
 
-# ──────────────────────────────────────────────────────────────
-# Login / Logout
-# ──────────────────────────────────────────────────────────────
-
 def login_view(request):
     if request.user.is_authenticated:
-        return _redirecionar_pos_login(request.user)
+        return _redirecionar_pos_login(request.user, request)
+
+    # Guarda o perfil sugerido vindo da carteira coringa (?perfil_sugerido=...)
+    perfil_sugerido = request.GET.get('perfil_sugerido')
+    if perfil_sugerido in ('conservador', 'intermediario', 'arrojado'):
+        request.session['perfil_sugerido'] = perfil_sugerido
 
     erro = None
     if request.method == 'POST':
@@ -39,20 +33,19 @@ def login_view(request):
         user = authenticate(request, username=username, password=password)
         if user:
             login(request, user)
-            return _redirecionar_pos_login(user)
+            return _redirecionar_pos_login(user, request)
         erro = 'Usuário ou senha incorretos.'
 
-    return render(request, 'users/login.html', {'erro': erro})
+    return render(request, 'users/login.html', {
+        'erro': erro,
+        'perfil_sugerido': request.session.get('perfil_sugerido'),
+    })
 
 
 def logout_view(request):
     logout(request)
     return redirect('users:login')
 
-
-# ──────────────────────────────────────────────────────────────
-# Questionário de suitability
-# ──────────────────────────────────────────────────────────────
 
 @login_required
 def quiz_view(request):
@@ -61,9 +54,12 @@ def quiz_view(request):
 
     from .models import Pergunta
     perguntas = Pergunta.objects.filter(ativa=True).prefetch_related('opcoes')
-    return render(request, 'users/quiz.html', {'perguntas': perguntas})
-def _redirecionar_pos_login(user):
-    return redirect('carteira')
+
+    return render(request, 'users/quiz.html', {
+        'perguntas': perguntas,
+        'perfil_sugerido': request.session.get('perfil_sugerido'),
+    })
+
 
 @login_required
 def processar_quiz(request):
@@ -78,7 +74,6 @@ def processar_quiz(request):
 
     score_total = 0
     batch = []
-
     for pergunta in perguntas:
         opcao_id = request.POST.get(f'pergunta_{pergunta.id}')
         if not opcao_id:
@@ -94,15 +89,17 @@ def processar_quiz(request):
     RespostaUsuario.objects.bulk_create(batch)
 
     perfil = PerfilRisco.objects.filter(
-        score_min__lte=score_total,
-        score_max__gte=score_total,
+        score_min__lte=score_total, score_max__gte=score_total
     ).first()
-
     if not perfil:
         perfil = PerfilRisco.objects.filter(tipo='intermediario').first()
 
     user.perfil_risco = perfil
     user.save(update_fields=['perfil_risco'])
+
+    # Verifica se bateu com o perfil sugerido na carteira coringa
+    perfil_sugerido = request.session.pop('perfil_sugerido', None)
+    request.session['perfil_bateu_sugestao'] = (perfil_sugerido == perfil.tipo)
 
     return redirect('users:resultado_quiz')
 
@@ -111,15 +108,13 @@ def processar_quiz(request):
 def resultado_quiz(request):
     if not request.user.perfil_risco:
         return redirect('users:quiz')
+
     return render(request, 'users/resultado_quiz.html', {
         'perfil':  request.user.perfil_risco,
         'usuario': request.user,
+        'bateu_sugestao': request.session.pop('perfil_bateu_sugestao', False),
     })
 
-
-# ──────────────────────────────────────────────────────────────
-# Perfil / Dashboard
-# ──────────────────────────────────────────────────────────────
 
 @login_required
 def perfil_view(request):
@@ -129,4 +124,3 @@ def perfil_view(request):
         'usuario': request.user,
         'perfil':  request.user.perfil_risco,
     })
-

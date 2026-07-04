@@ -490,3 +490,137 @@ class SentimentoMercado(models.Model):
     def __str__(self):
         ticker = self.ativo.ticker if self.ativo else "GERAL"
         return f"{ticker} | {self.fonte} | {self.data_ref} | {self.score_sentimento}"
+    
+    from django.db import models
+ 
+ 
+class KpiEstatistico(models.Model):
+    """
+    Indicadores estatísticos calculados a partir de retornos logarítmicos.
+    Um registro por ativo por janela de cálculo (ex: 252 pregões = 1 ano).
+    """
+    JANELA_CHOICES = [
+        (63,  '3 meses'),
+        (126, '6 meses'),
+        (252, '1 ano'),
+        (504, '2 anos'),
+        (756, '3 anos'),
+    ]
+ 
+    ativo        = models.ForeignKey(
+        'portfolio.Ativo', on_delete=models.CASCADE,
+        related_name='kpis_estatisticos'
+    )
+    data_calculo = models.DateField()
+    janela_dias  = models.IntegerField(
+        choices=JANELA_CHOICES, default=252,
+        help_text="Janela de pregões usada no cálculo"
+    )
+ 
+    # ── Retornos logarítmicos ─────────────────────────────────────────
+    media_retorno   = models.DecimalField(
+        max_digits=12, decimal_places=8, null=True, blank=True,
+        help_text="Média dos retornos log diários"
+    )
+    mediana_retorno = models.DecimalField(
+        max_digits=12, decimal_places=8, null=True, blank=True
+    )
+    variancia_retorno = models.DecimalField(
+        max_digits=12, decimal_places=10, null=True, blank=True,
+        help_text="Variância dos retornos log diários"
+    )
+    dp_retorno = models.DecimalField(
+        max_digits=10, decimal_places=8, null=True, blank=True,
+        help_text="Desvio padrão dos retornos log diários"
+    )
+ 
+    # ── Risco ────────────────────────────────────────────────────────
+    volatilidade_anual = models.DecimalField(
+        max_digits=8, decimal_places=6, null=True, blank=True,
+        help_text="Desvio padrão anualizado (dp_diario × √252)"
+    )
+    cv = models.DecimalField(
+        max_digits=10, decimal_places=6, null=True, blank=True,
+        help_text="Coeficiente de variação = dp / |média| (risco relativo)"
+    )
+ 
+    # ── Distribuição dos retornos ─────────────────────────────────────
+    skewness = models.DecimalField(
+        max_digits=10, decimal_places=6, null=True, blank=True,
+        help_text="Assimetria: >0 cauda direita, <0 cauda esquerda"
+    )
+    curtose = models.DecimalField(
+        max_digits=10, decimal_places=6, null=True, blank=True,
+        help_text="Curtose excess: >0 leptocúrtica (caudas pesadas)"
+    )
+    jarque_bera = models.DecimalField(
+        max_digits=12, decimal_places=4, null=True, blank=True,
+        help_text="Estatística do teste Jarque-Bera de normalidade"
+    )
+    jarque_bera_pvalue = models.DecimalField(
+        max_digits=8, decimal_places=6, null=True, blank=True,
+        help_text="p-valor do JB: <0.05 rejeita normalidade"
+    )
+    retorno_normal = models.BooleanField(
+        null=True, blank=True,
+        help_text="True se JB não rejeita normalidade (p > 0.05)"
+    )
+ 
+    # ── Mercado (vs Ibovespa) ─────────────────────────────────────────
+    beta = models.DecimalField(
+        max_digits=8, decimal_places=6, null=True, blank=True,
+        help_text="Beta vs Ibovespa (sensibilidade ao mercado)"
+    )
+    correlacao_ibov = models.DecimalField(
+        max_digits=6, decimal_places=4, null=True, blank=True,
+        help_text="Correlação de Pearson com o Ibovespa"
+    )
+    r_quadrado = models.DecimalField(
+        max_digits=6, decimal_places=4, null=True, blank=True,
+        help_text="R² da regressão vs Ibovespa"
+    )
+ 
+    # ── Preço absoluto ───────────────────────────────────────────────
+    media_preco = models.DecimalField(
+        max_digits=12, decimal_places=4, null=True, blank=True
+    )
+    dp_preco    = models.DecimalField(
+        max_digits=12, decimal_places=4, null=True, blank=True
+    )
+    preco_min   = models.DecimalField(
+        max_digits=12, decimal_places=4, null=True, blank=True
+    )
+    preco_max   = models.DecimalField(
+        max_digits=12, decimal_places=4, null=True, blank=True
+    )
+    n_observacoes = models.IntegerField(
+        null=True, blank=True,
+        help_text="Número real de pregões usados no cálculo"
+    )
+ 
+    class Meta:
+        unique_together = ('ativo', 'data_calculo', 'janela_dias')
+        ordering        = ['-data_calculo']
+        verbose_name    = "KPI Estatístico"
+        verbose_name_plural = "KPIs Estatísticos"
+ 
+    def __str__(self):
+        return f"{self.ativo.ticker} | {self.janela_dias}d | {self.data_calculo}"
+ 
+    @property
+    def classificacao_risco(self):
+        """Classifica o ativo pelo nível de volatilidade anual."""
+        if self.volatilidade_anual is None:
+            return "indefinido"
+        v = float(self.volatilidade_anual)
+        if v < 0.15:  return "baixo risco"
+        if v < 0.30:  return "risco moderado"
+        if v < 0.50:  return "alto risco"
+        return "muito alto risco"
+ 
+    @property
+    def distribuicao_normal(self):
+        """Texto interpretativo do teste de normalidade."""
+        if self.retorno_normal is None:
+            return "não testado"
+        return "normal" if self.retorno_normal else "não-normal"

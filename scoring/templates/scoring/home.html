@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Insight Invest — Análise quantitativa de ações</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: system-ui, sans-serif; background: #f5f5f5; color: #1a1a1a; }
+
+  .nav { background: #fff; border-bottom: 1px solid #eee; padding: 14px 24px;
+         display: flex; align-items: center; gap: 20px; }
+  .nav .logo { font-weight: 700; font-size: 18px; }
+  .nav .links { display: flex; gap: 18px; font-size: 14px; color: #555; }
+  .nav .login-btn { margin-left: auto; background: #534AB7; color: #fff;
+                     padding: 7px 16px; border-radius: 8px; font-size: 13px;
+                     text-decoration: none; }
+
+  .hero { background: #14141c; color: #fff; padding: 36px 24px; text-align: center; }
+  .hero h1 { font-size: 22px; font-weight: 600; margin-bottom: 16px; }
+  .search-box { display: flex; max-width: 480px; margin: 0 auto; }
+  .search-box input { flex: 1; padding: 11px 16px; border-radius: 8px 0 0 8px;
+                       border: none; font-size: 14px; }
+  .search-box button { padding: 11px 20px; border-radius: 0 8px 8px 0;
+                        background: #534AB7; color: #fff; border: none; font-size: 13px; }
+
+  .ticker-tape { background: #1a1a24; color: #ccc; padding: 9px 24px;
+                 display: flex; gap: 24px; overflow-x: auto; font-size: 12px;
+                 white-space: nowrap; }
+  .ticker-tape b { color: #fff; }
+  .up { color: #4ade80; } .down { color: #f87171; }
+
+  .container { max-width: 1100px; margin: 0 auto; padding: 28px 16px; }
+
+  .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-bottom: 24px; }
+  .grid-2 { display: grid; grid-template-columns: 1.1fr 1fr; gap: 14px; }
+  @media(max-width:760px) { .grid-3, .grid-2 { grid-template-columns: 1fr; } }
+
+  .card { background: #fff; border-radius: 12px; padding: 18px 20px;
+          box-shadow: 0 1px 3px rgba(0,0,0,.06); }
+  .card-title { font-size: 14px; font-weight: 600; margin-bottom: 14px;
+                display: flex; align-items: center; gap: 8px; }
+
+  .rank-row { display: flex; align-items: center; gap: 10px; padding: 7px 0;
+              border-bottom: 1px solid #f3f3f3; }
+  .rank-row:last-child { border-bottom: none; }
+  .rank-pos { font-size: 12px; color: #999; width: 16px; }
+  .rank-ticker { font-weight: 600; font-size: 13px; width: 58px; }
+  .rank-setor { font-size: 12px; color: #888; flex: 1;
+                overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .rank-valor { font-size: 13px; font-weight: 600; color: #1D9E75; }
+
+  .noticia-row { display: flex; align-items: flex-start; gap: 9px; padding: 9px 0;
+                 border-bottom: 1px solid #f3f3f3; }
+  .noticia-row:last-child { border-bottom: none; }
+  .badge { font-size: 10px; font-weight: 600; padding: 2px 8px; border-radius: 20px;
+           flex-shrink: 0; margin-top: 2px; }
+  .badge-positivo { background: #E1F5EE; color: #0F6E56; }
+  .badge-negativo { background: #FAECE7; color: #993C1D; }
+  .badge-neutro   { background: #FAEEDA; color: #854F0B; }
+  .noticia-texto { font-size: 13px; line-height: 1.4; }
+
+  table.macro-table { width: 100%; font-size: 13px; }
+  table.macro-table td { padding: 6px 0; }
+  table.macro-table td:last-child { text-align: right; font-weight: 600; }
+
+  .cta-banner { background: #534AB7; color: #fff; border-radius: 12px;
+                padding: 20px 24px; text-align: center; margin-top: 24px; }
+  .cta-banner a { background: #fff; color: #534AB7; padding: 8px 18px;
+                  border-radius: 8px; text-decoration: none; font-size: 13px;
+                  font-weight: 600; display: inline-block; margin-top: 10px; }
+</style>
+</head>
+<body>
+
+<nav class="nav">
+  <span class="logo">📈 Insight Invest</span>
+  <div class="links">
+    <span>Ações</span><span>Rankings</span><span>Notícias</span><span>Macro</span>
+  </div>
+  <a href="{% url 'users:login' %}" class="login-btn">Entrar</a>
+</nav>
+
+<div class="hero">
+  <h1>Análise quantitativa de ações com dados fundamentalistas, macro e sentimento</h1>
+  <div class="search-box">
+    <input type="text" placeholder="Pesquise por ticker ou empresa">
+    <button>Buscar</button>
+  </div>
+</div>
+
+<div class="ticker-tape">
+  {% if macro %}
+  <span>Selic <b>{{ macro.selic }}%</b></span>
+  <span>IPCA <b class="down">{{ macro.ipca_mensal }}%</b></span>
+  <span>PIB <b class="up">+{{ macro.pib_trimestral }}%</b></span>
+  <span>Dólar <b>R$ {{ macro.dolar_brl|default:"—" }}</b></span>
+  {% endif %}
+  {% if score_macro %}
+  <span>Score macro <b class="{% if score_macro < 40 %}down{% else %}up{% endif %}">{{ score_macro|floatformat:0 }}/100</b></span>
+  {% endif %}
+</div>
+
+<div class="container">
+
+  <div class="grid-3">
+    <div class="card">
+      <div class="card-title">📊 Maior score final</div>
+      {% for r in ranking_score %}
+      <div class="rank-row">
+        <span class="rank-pos">{{ r.posicao }}</span>
+        <span class="rank-ticker">{{ r.ticker }}</span>
+        <span class="rank-setor">{{ r.setor }}</span>
+        <span class="rank-valor">{{ r.valor|floatformat:0 }}{{ r.sufixo }}</span>
+      </div>
+      {% empty %}
+      <p style="color:#999;font-size:13px">Sem dados ainda.</p>
+      {% endfor %}
+    </div>
+
+    <div class="card">
+      <div class="card-title">💰 Maior dividend yield</div>
+      {% for r in ranking_dy %}
+      <div class="rank-row">
+        <span class="rank-pos">{{ r.posicao }}</span>
+        <span class="rank-ticker">{{ r.ticker }}</span>
+        <span class="rank-setor">{{ r.setor }}</span>
+        <span class="rank-valor">{{ r.valor }}{{ r.sufixo }}</span>
+      </div>
+      {% empty %}
+      <p style="color:#999;font-size:13px">Sem dados ainda.</p>
+      {% endfor %}
+    </div>
+
+    <div class="card">
+      <div class="card-title">💬 Maior score de sentimento</div>
+      {% for r in ranking_sentimento %}
+      <div class="rank-row">
+        <span class="rank-pos">{{ r.posicao }}</span>
+        <span class="rank-ticker">{{ r.ticker }}</span>
+        <span class="rank-setor">{{ r.setor }}</span>
+        <span class="rank-valor">{{ r.valor }}{{ r.sufixo }}</span>
+      </div>
+      {% empty %}
+      <p style="color:#999;font-size:13px">Sem dados ainda.</p>
+      {% endfor %}
+    </div>
+  </div>
+
+  <div class="grid-2">
+    <div class="card">
+      <div class="card-title">📰 Notícias e sentimento de mercado</div>
+      {% for n in noticias %}
+      <div class="noticia-row">
+        <span class="badge badge-{{ n.sentimento_label }}">{{ n.sentimento_label }}</span>
+        <span class="noticia-texto">{{ n.texto|truncatechars:110 }}</span>
+      </div>
+      {% empty %}
+      <p style="color:#999;font-size:13px">Nenhuma notícia coletada ainda.</p>
+      {% endfor %}
+    </div>
+
+    <div class="card">
+      <div class="card-title">🏦 Radar macroeconômico</div>
+      {% if macro %}
+      <table class="macro-table">
+        <tr><td>Selic meta</td><td>{{ macro.selic }}% a.a.</td></tr>
+        <tr><td>IPCA mensal</td><td>{{ macro.ipca_mensal }}%</td></tr>
+        <tr><td>PIB trimestral</td><td>{{ macro.pib_trimestral }}%</td></tr>
+        <tr><td>Desemprego</td><td>{{ macro.desemprego|default:"—" }}%</td></tr>
+        <tr><td>Balança comercial</td><td>{{ macro.balanca_comercial|default:"—" }}</td></tr>
+      </table>
+      {% else %}
+      <p style="color:#999;font-size:13px">Dados macro ainda não carregados.</p>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="cta-banner">
+    <div style="font-size:15px;font-weight:600">Quer uma carteira ideal para o seu perfil de risco?</div>
+    <div style="font-size:13px;opacity:.85;margin-top:4px">Cadastre-se grátis e responda o quiz para liberar a versão Pro</div>
+    <a href="{% url 'users:login' %}">Criar conta gratuita</a>
+  </div>
+
+</div>
+</body>
+</html>

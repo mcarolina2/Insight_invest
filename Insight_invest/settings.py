@@ -46,6 +46,8 @@ INSTALLED_APPS = [
     'interaction',
     'analysis',
     'content',
+    'billing',
+    'core',
 ]
 
 MIDDLEWARE = [

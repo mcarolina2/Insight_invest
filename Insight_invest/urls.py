@@ -19,9 +19,14 @@ from django.urls import path
 from django.urls import path, include  
 from scoring.views import carteira_view, otimizar_ajax
 
+
+
+
 urlpatterns = [
     path('admin/',              admin.site.urls),
+    path('',                   include('core.urls')),   
     path('',                    include('users.urls')),
     path("carteira/", carteira_view, name="carteira"),
     path('carteira/otimizar/', otimizar_ajax,  name='otimizar'),
+    path('billing/', include('billing.urls')),
 ]
