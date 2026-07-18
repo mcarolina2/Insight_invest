@@ -1,12 +1,3 @@
-"""
-Salve em: market_data/management/commands/load_cvm_data.py
-
-Execução:
-  python manage.py load_cvm_data                  # últimos 8 anos
-  python manage.py load_cvm_data --ano 2023       # só um ano
-  python manage.py load_cvm_data --force          # reprocessa mesmo se já existir
-"""
-
 import logging
 from datetime import date
 

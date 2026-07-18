@@ -18,11 +18,22 @@ Uso:
 import logging
 from datetime import date, timedelta
 from typing import Optional
+from .motor_scoring_v2 import *
 
 import numpy as np
 import pandas as pd
 
 logger = logging.getLogger(__name__)
+
+
+
+
+
+def calcular_scores_todos_ativos(
+    data_ref=None,
+    perfil="intermediario"
+):
+    return calcular_scores_v2(perfil)
 
 
 # ---------------------------------------------------------------------------

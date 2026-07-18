@@ -43,7 +43,8 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         # Importa de scoring.services (services esta dentro do app scoring)
         try:
-            from scoring.services.motor_scoring import calcular_scores_todos_ativos
+            from scoring.services.motor_scoring_v2 import calcular_scores_v2 as calcular_scores_todos_ativos
+            #from scoring.services.motor_scoring import calcular_scores_todos_ativos
             from scoring.services.recomendacao import gerar_recomendacao
         except ModuleNotFoundError as e:
             raise CommandError(

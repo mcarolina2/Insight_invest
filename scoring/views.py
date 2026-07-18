@@ -115,8 +115,9 @@ def otimizar_ajax(request):
     modelo              = MODELO_MAP.get((risco, retorno), "sharpe")
 
     try:
-        from scoring.services.motor_scoring import (
-            calcular_scores_todos_ativos,
+        from scoring.services.motor_scoring_v2 import (
+            calcular_scores_v2 as calcular_scores_todos_ativos,
+            #calcular_scores_todos_ativos,
             montar_carteira_otimizada,
         )
 

@@ -283,3 +283,6 @@ def processar_dataframe(df_bp: pd.DataFrame, df_dre: pd.DataFrame) -> pd.DataFra
             resultados.append(kpis)
 
     return pd.DataFrame(resultados)
+
+
+

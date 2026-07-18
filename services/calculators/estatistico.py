@@ -1,28 +1,16 @@
-"""
-services/calculators/estatistico.py
-
-Tradução fiel do código R do professor para Python.
-Implementa exatamente os mesmos cálculos:
-
-  R: correlationTest(x, y, method="pearson")  → scipy.stats.pearsonr()
-  R: cor(Retornos)                             → df.corr(method="pearson")
-  R: corrplot(...)                             → seaborn.heatmap()
-  R: returns(dados)   [fPortfolio]             → np.log(P_t / P_t-1)  (log-retorno)
-  R: portfolioFrontier(Retornos)               → scipy.optimize.minimize()
-  R: sd(x) * sqrt(252)                         → volatilidade anual
-  R: skewness(x)  [fBasics]                    → scipy.stats.skew()
-  R: kurtosis(x)  [fBasics]                    → scipy.stats.kurtosis()  (excess)
-  R: jarqueberaTest(x) [fBasics]               → scipy.stats.jarque_bera()
-
-Dependências:
-  pip install yfinance numpy pandas scipy matplotlib seaborn
-"""
-
+import yfinance as yf  
 import logging
 from datetime import date, timedelta
 import numpy as np
 import pandas as pd
 from scipy import stats
+import matplotlib.pyplot as plt
+import seaborn as sns
+from scipy.optimize import minimize
+import matplotlib.pyplot as plt
+import matplotlib.pyplot as plt
+
+
 
 logger = logging.getLogger(__name__)
 
@@ -123,8 +111,6 @@ def plotar_matriz_correlacao(retornos: pd.DataFrame, titulo: str = "Matriz de Co
     Plota a matriz de correlação com heatmap.
     R: corrplot(matriz_cor, method="color", addCoef.col="black")
     """
-    import matplotlib.pyplot as plt
-    import seaborn as sns
 
     matriz = matriz_correlacao(retornos)
 
@@ -149,7 +135,6 @@ def plotar_dispersao(x: pd.Series, y: pd.Series, nome_x: str, nome_y: str):
     Gráfico de dispersão com linha de regressão.
     R: plot(x, y) + abline(lm(x~y), col="red", lwd=3)
     """
-    import matplotlib.pyplot as plt
 
     fig, ax = plt.subplots(figsize=(7, 5))
     ax.scatter(x, y, alpha=0.4, s=15, color="#1D9E75")
@@ -177,32 +162,7 @@ def calcular_estatisticas_ativo(
     retorno_serie: pd.Series,
     retorno_ibov: pd.Series = None,
 ) -> dict:
-    """
-    Calcula todos os indicadores estatísticos de um ativo.
-    Equivalência exata com o código R do professor:
 
-      R → Python
-      ─────────────────────────────────────────────────────
-      mean(x)          → np.mean()
-      median(x)        → np.median()
-      var(x)           → np.var(ddof=1)          (variância amostral)
-      sd(x)            → np.std(ddof=1)
-      sd(x)*sqrt(252)  → volatilidade anual
-      sd(x)/mean(x)    → coeficiente de variação
-      skewness(x)      → scipy.stats.skew()
-      kurtosis(x)      → scipy.stats.kurtosis()  (excess kurtosis)
-      jarqueberaTest(x)→ scipy.stats.jarque_bera()
-      beta(y~x)        → stats.linregress(ibov, ativo).slope
-      cor(x, y)        → stats.pearsonr()
-
-    Args:
-        preco_serie:   série de preços (para estatísticas de preço)
-        retorno_serie: série de log-retornos (para estatísticas de retorno)
-        retorno_ibov:  log-retornos do Ibovespa (para beta e correlação)
-
-    Returns:
-        dict compatível com os campos do model KpiEstatistico
-    """
     r = retorno_serie.dropna()
     p = preco_serie.dropna()
 
@@ -310,8 +270,6 @@ def calcular_fronteira_eficiente(
     Returns:
         lista de dicts com vol, retorno, sharpe (anualizados)
     """
-    from scipy.optimize import minimize
-
     mu  = retornos.mean().values * PREGOES_ANO
     cov = retornos.cov().values  * PREGOES_ANO
     n   = len(mu)
@@ -364,8 +322,6 @@ def plotar_fronteira_eficiente(
         pontos_interesse: lista de {vol, retorno, cor, label}
           Equivale ao: points(0.0365, -0.0027, pch=19, col="green")
     """
-    import matplotlib.pyplot as plt
-
     vols   = [p["volatilidade"] for p in fronteira]
     rets   = [p["retorno"]      for p in fronteira]
     sharpe = [p["sharpe"]       for p in fronteira]
