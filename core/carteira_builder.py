@@ -192,7 +192,7 @@ def montar_carteiras_home() -> dict:
       'arrojado':      [...],
     }
     """
-    from market_data.models import Ativo
+    from portfolio.models import Ativo
     from scoring.services.motor_scoring_v2 import calcular_scores_v2
     carteiras = {}
 

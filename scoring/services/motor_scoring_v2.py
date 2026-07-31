@@ -315,15 +315,95 @@ def calcular_scores_v2(perfil: str = 'intermediario') -> pd.DataFrame:
         except Exception:
             pass
 
-    # ── 6. Converte tudo para float nativo (resolve np.float64) ──
+    # ── 6. Converte tudo para float nativo ─────────────────────
     for col in df.select_dtypes(include=[np.floating, np.integer]).columns:
         df[col] = df[col].astype(float)
 
     df['ativo_id'] = df['ativo_id'].astype(int)
     df['kpi_macro_id'] = int(macro.id) if macro else None
-    df['data_calculo']  = date.today().isoformat()
+    df['data_calculo'] = date.today().isoformat()
 
-    return df.reset_index()
+    # ─────────────────────────────────────────────────────────────
+    # 7. Seleciona os melhores ativos
+    # ─────────────────────────────────────────────────────────────
+
+    df = df.sort_values(
+        by="score_final",
+        ascending=False
+    )
+
+    qtd_ativos = cfg.get("qtd_ativos", 10)
+
+    top_df = df.head(qtd_ativos).copy()
+
+    # ─────────────────────────────────────────────────────────────
+    # 8. Alocação via Markowitz
+    # ─────────────────────────────────────────────────────────────
+
+    try:
+        import yfinance as yf
+        from pypfopt import EfficientFrontier
+
+        tickers = top_df.index.tolist()
+
+        yahoo_tickers = [
+            f"{ticker}.SA"
+            for ticker in tickers
+        ]
+
+        precos = yf.download(
+            yahoo_tickers,
+            period="3y",
+            auto_adjust=True,
+            progress=False
+        )["Close"]
+
+        retornos = precos.pct_change().dropna()
+
+        if len(retornos) > 30:
+
+            mu = retornos.mean() * 252
+            cov = retornos.cov() * 252
+
+            ef = EfficientFrontier(
+                mu,
+                cov,
+                weight_bounds=(
+                    0.05,
+                    cfg.get("max_pct_ativo", 0.20)
+                )
+            )
+
+            ef.max_sharpe()
+
+            pesos = ef.clean_weights()
+
+            top_df["pct_markowitz"] = (
+                top_df.index.map(
+                    lambda t: pesos.get(f"{t}.SA", 0) * 100
+                )
+            ).round(2)
+
+        else:
+            raise Exception("Histórico insuficiente")
+
+    except Exception as e:
+
+        logger.warning(
+            f"Markowitz falhou: {e}"
+        )
+
+        total_score = float(
+            top_df["score_final"].sum()
+        ) or 1
+
+        top_df["pct_markowitz"] = (
+            top_df["score_final"]
+            / total_score
+            * 100
+        ).round(2)
+
+    return top_df.reset_index()
 def calcular_scores_todos_ativos(
     data_ref=None,
     perfil="intermediario"
