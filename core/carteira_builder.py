@@ -224,29 +224,37 @@ def montar_carteiras_home() -> dict:
             }
 
             # 5. Calcula percentual proporcional ao score
-            total_score = float(top['score_final'].sum())
-
+            # 5. Utiliza a alocação calculada pelo motor
             ativos = []
-            for _, row in top.iterrows():
-                ativo_id = int(row['ativo_id'])
-                ticker   = str(row['ticker'])
-                score    = _f(row['score_final'], 1) or 50
-                pct      = round(score / total_score * 100, 1) if total_score else 0
-                info     = ativos_map.get(ativo_id, {'nome': ticker, 'setor': ''})
 
-                # 6. Busca os KPIs das 4 camadas
+            for _, row in top.iterrows():
+
+                ativo_id = int(row['ativo_id'])
+                ticker = str(row['ticker'])
+
+                score = _f(row['score_final'], 1) or 50
+
+                pct = round(
+                    float(row.get('pct_markowitz', 0)),
+                    1
+                )
+
+                info = ativos_map.get(
+                    ativo_id,
+                    {'nome': ticker, 'setor': ''}
+                )
+
                 ativos.append({
                     'ticker': ticker,
-                    'nome':   info['nome'],
-                    'setor':  info['setor'],
-                    'pct':    pct,
-                    'score':  int(round(score)),
-                    'fund':   _buscar_fund(ativo_id),
-                    'estat':  _buscar_estat(ativo_id),
-                    'merc':   _buscar_merc(ativo_id),
-                    'sent':   _buscar_sent(ativo_id),
+                    'nome': info['nome'],
+                    'setor': info['setor'],
+                    'pct': pct,
+                    'score': int(round(score)),
+                    'fund': _buscar_fund(ativo_id),
+                    'estat': _buscar_estat(ativo_id),
+                    'merc': _buscar_merc(ativo_id),
+                    'sent': _buscar_sent(ativo_id),
                 })
-
             carteiras[perfil] = ativos
             logger.info(f"Carteira {perfil}: {len(ativos)} ativos")
 

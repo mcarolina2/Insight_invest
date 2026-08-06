@@ -1,15 +1,11 @@
-"""
-core/views.py
-
-home_view: página inicial pública — sem login, sem quiz.
-similares_ajax: endpoint AJAX para o botão "trocar" de cada ativo.
-"""
-
 import json
 from django.shortcuts import render
 from django.http import JsonResponse
 from django.views.decorators.http import require_GET
-
+from django.shortcuts import render
+from scoring.models import CarteiraRecomendada
+from market_data.models import KpiMacro, KpiMicro
+from scoring.services.motor_scoring_v2 import PERFIS, calcular_score_macro
 
 # ─────────────────────────────────────────────────────────────
 # HELPERS
@@ -65,6 +61,7 @@ def _enriquecer_ativo(ticker: str, perfil: str) -> dict:
     fund = {}
     if micro:
         def fmt_pct(v):  return f"{float(v)*100:.1f}%" if v else "—"
+        def fmt_dy(v):   return f"{float(v):.2f}%" if v is not None else "—"
         def fmt_x(v):    return f"{float(v):.2f}x"    if v else "—"
         def fmt_num(v):  return f"{float(v):.1f}"     if v else "—"
         fund = {
@@ -75,7 +72,7 @@ def _enriquecer_ativo(ticker: str, perfil: str) -> dict:
             'Liq. Corrente':  fmt_x(micro.liquidez_corrente),
             'Dív/EBITDA':     fmt_x(micro.divida_ebitda),
             'P/L':            fmt_num(micro.pl) + 'x' if micro.pl else '—',
-            'DY':             fmt_pct(micro.dy) if micro.dy else '—',
+            'DY':             fmt_dy(micro.dy) if micro.dy else '—',
         }
 
     # ── Estatístico (KpiEstatistico mais recente) ─────────────────
@@ -155,7 +152,7 @@ def _montar_carteiras(perfis_config: dict) -> dict:
     Monta as carteiras de amostra para cada perfil de risco,
     buscando os dados reais de KpiMicro, KpiTime e Sentimento.
     """
-    from scoring.services.motor_scoring import calcular_scores_todos_ativos
+    from scoring.services.motor_scoring_v2 import calcular_scores_todos_ativos
     from portfolio.models import Ativo
 
     carteiras = {}
@@ -215,7 +212,7 @@ def home_view(request):
     # ── Rankings ────────────────────────────────────────────────
     top_scores = _top_recentes(ScoreAtivo, 'data_calculo', 'score_final', limite=5)
     ranking_score = [
-        {'pos': i+1, 'ticker': s.ativo.ticker,
+        {'posicao': i+1, 'ticker': s.ativo.ticker,
          'setor': s.ativo.setor or '—', 'valor': float(s.score_final)}
         for i, s in enumerate(top_scores)
     ]
@@ -238,13 +235,13 @@ def home_view(request):
 
     top_liq = _top_recentes(
         KpiMicro, 'data_ref', 'liquidez_corrente',
-        filtro_extra={'liquidez_corrente__isnull': False,
-                      'liquidez_corrente__gt': 0}, limite=10)
+        filtro_extra={ "liquidez_corrente__gte": 1,
+                      "liquidez_corrente__lte": 5}, limite=5)
     ranking_liq = []
     for k in top_liq:
         if float(k.liquidez_corrente) <= 20:
             ranking_liq.append({
-                'pos': len(ranking_liq)+1,
+                'posicao': len(ranking_liq)+1,
                 'ticker': k.ativo.ticker,
                 'setor': k.ativo.setor or '—',
                 'valor': round(float(k.liquidez_corrente), 2)
@@ -254,11 +251,13 @@ def home_view(request):
 
     top_div = _top_recentes(
         KpiMicro, 'data_ref', 'divida_ebitda',
-        filtro_extra={'divida_ebitda__isnull': False,
-                      'divida_ebitda__gte': 0},
+        filtro_extra={"divida_ebitda__gt": 0,
+                      "divida_ebitda__lte": 3,
+                      "roe__gt":0, 
+                      "roa__gt":0,},
         reverso=False, limite=5)
     ranking_div = [
-        {'pos': i+1, 'ticker': k.ativo.ticker,
+        {'posicao': i+1, 'ticker': k.ativo.ticker,
          'setor': k.ativo.setor or '—',
          'valor': round(float(k.divida_ebitda), 2)}
         for i, k in enumerate(top_div)
@@ -273,7 +272,7 @@ def home_view(request):
         .order_by('-s')[:5]
     )
     ranking_sent = [
-        {'pos': i+1, 'ticker': r['ativo__ticker'],
+        {'posicao': i+1, 'ticker': r['ativo__ticker'],
          'setor': r['ativo__setor'] or '—',
          'valor': round((float(r['s']) + 1) / 2 * 100)}
         for i, r in enumerate(ranking_sent)
@@ -343,16 +342,16 @@ def home_view(request):
 
 
     return render(request, 'core/home.html', {
-        'ranking_score': ranking_score,
-        'ranking_dy':    ranking_dy,
-        'ranking_liq':   ranking_liq,
-        'ranking_div':   ranking_div,
-        'ranking_sent':  ranking_sent,
-        'macro':         macro,
-        'score_macro':   score_macro,
-        'noticias':      noticias,
-        'carteiras_coringa': carteiras_coringa,   # <- ADICIONE ESTA LINHA
-        'carteiras_json': carteiras_json,
+      'ranking_score':     ranking_score,
+       'ranking_dy':        ranking_dy,
+       'ranking_liquidez':  ranking_liq,     # renomeado
+       'ranking_divida':    ranking_div,     # renomeado
+        'ranking_sentimento': ranking_sent,   # renomeado
+        'macro':             macro,
+        'score_macro':       score_macro,
+        'noticias':          noticias,
+         'carteiras_coringa': carteiras_coringa,
+        'carteiras_json':    carteiras_json,
     })
 
 

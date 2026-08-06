@@ -250,26 +250,11 @@ def calcular_estatisticas_ativo(
 # FRONTEIRA EFICIENTE (equivale ao portfolioFrontier do fPortfolio)
 # =============================================================================
 
-def calcular_fronteira_eficiente(
-    retornos: pd.DataFrame,
-    n_pontos: int = 50,
-    rf: float = 0.1375,
-) -> list[dict]:
-    """
-    Calcula N pontos na fronteira eficiente de Markowitz.
-    Equivale ao portfolioFrontier(Retornos) do R.
-
-    R: frontierPlot(fronteira, auto=FALSE)
-    Python: retorna lista de {vol, retorno, sharpe} para plotar
-
-    Args:
-        retornos: DataFrame de log-retornos (colunas = tickers)
-        n_pontos: quantos pontos calcular na curva
-        rf:       taxa livre de risco (Selic para anualizarmos)
-
-    Returns:
-        lista de dicts com vol, retorno, sharpe (anualizados)
-    """
+def calcular_fronteira_eficiente(retornos: pd.DataFrame, n_pontos: int = 50, rf: float = None, ) -> list[dict]:
+    if rf is None:
+        from market_data.models import KpiMacro
+        macro = KpiMacro.objects.order_by("-data_ref").first()
+        rf = (macro.selic / 100) if macro and macro.selic else 0.1375 
     mu  = retornos.mean().values * PREGOES_ANO
     cov = retornos.cov().values  * PREGOES_ANO
     n   = len(mu)

@@ -1,30 +1,41 @@
-import io, logging, os, time
+import io
+import json
+import base64
+import logging
+import os
+import time
+
 import pandas as pd
 import requests
 
 logger = logging.getLogger(__name__)
 CACHE_PATH = "data/tickers_b3.csv"
 
-B3_URL = (
-    "https://sistemaswebb3-listados.b3.com.br/listedCompaniesProxy/"
-    "CompanyCall/GetInitialCompanies/"
-)
+# ─────────────────────────────────────────────────────────────
+# URLs e headers
+# ─────────────────────────────────────────────────────────────
+
+B3_URL = "https://sistemaswebb3-listados.b3.com.br/listedCompaniesProxy/CompanyCall/GetInitialCompanies/"
+GETDETAIL_URL = "https://sistemaswebb3-listados.b3.com.br/listedCompaniesProxy/CompanyCall/GetDetail/"
 CVM_URL = "https://dados.cvm.gov.br/dados/CIA_ABERTA/CAD/DADOS/cad_cia_aberta.csv"
 
 HEADERS_B3 = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
     "Accept": "application/json, text/plain, */*",
-    "Content-Type": "application/json",
-    "Origin": "https://www.b3.com.br",
-    "Referer": "https://www.b3.com.br/",
 }
 HEADERS_CVM = {"User-Agent": "InsightInvest/1.0"}
 
 
+# ─────────────────────────────────────────────────────────────
+# GetInitialCompanies — lista empresas ativas (paginado)
+# ─────────────────────────────────────────────────────────────
+
 def _buscar_pagina_b3(pagina):
     payload = {"language": "pt-br", "pageNumber": pagina, "pageSize": 120}
+    payload_b64 = base64.b64encode(json.dumps(payload).encode()).decode()
+    url = B3_URL + payload_b64
     try:
-        r = requests.post(B3_URL, json=payload, headers=HEADERS_B3, timeout=15)
+        r = requests.get(url, headers=HEADERS_B3, timeout=15)
         if r.status_code != 200 or not r.text.strip():
             return []
         dados = r.json()
@@ -37,31 +48,79 @@ def _buscar_pagina_b3(pagina):
     return []
 
 
+# ─────────────────────────────────────────────────────────────
+# GetDetail — tickers reais por empresa
+# ─────────────────────────────────────────────────────────────
+
+def buscar_detalhe_empresa(cod_cvm):
+    """Busca os tickers reais de uma empresa via GetDetail."""
+    payload = {"codeCVM": str(cod_cvm), "language": "pt-br"}
+    payload_b64 = base64.b64encode(json.dumps(payload).encode()).decode()
+    try:
+        r = requests.get(GETDETAIL_URL + payload_b64, headers=HEADERS_B3, timeout=15)
+        if r.status_code != 200 or not r.text.strip() or r.text.strip() == "{}":
+            return None
+        return r.json()
+    except Exception as e:
+        logger.warning(f"GetDetail cod_cvm={cod_cvm}: {e}")
+        return None
+
+
+def _tickers_validos(other_codes):
+    """Mantém só tickers negociáveis de ações/FIIs/BDRs — descarta debêntures (têm hífen)."""
+    validos = []
+    for item in other_codes or []:
+        code = str(item.get("code", "")).strip().upper()
+        if code and "-" not in code and code[-1].isdigit():
+            validos.append(code)
+    return validos
+
+
 def buscar_empresas_b3():
-    registros, pagina = [], 1
-    print("Buscando empresas da B3", end="", flush=True)
+    empresas_brutas, pagina = [], 1
+    print("Listando empresas da B3", end="", flush=True)
     while True:
         empresas = _buscar_pagina_b3(pagina)
         if not empresas:
             break
-        for emp in empresas:
-            ticker = str(emp.get("issuingCompany", "") or "").strip().upper()
-            cod_cvm = str(emp.get("codeCVM", "")).strip().zfill(6)
-            if ticker and len(ticker) >= 4:
-                registros.append({
-                    "ticker": ticker,
-                    "nome_pregao": str(emp.get("companyName", "")).strip(),
-                    "cod_cvm": cod_cvm,
-                    "segmento": str(emp.get("segment", "")).strip(),
-                })
+        empresas_brutas.extend([e for e in empresas if str(e.get("status")) == "A"])
         print(".", end="", flush=True)
         pagina += 1
         time.sleep(0.4)
-    print(f" {len(registros)} empresas")
+    print(f" {len(empresas_brutas)} empresas ativas listadas")
+
+    print("Buscando tickers reais por empresa (GetDetail)...")
+    registros = []
+    for i, emp in enumerate(empresas_brutas):
+        cod_cvm_bruto = str(emp.get("codeCVM", "")).strip()   # sem zfill — pra chamada da API
+        detalhe = buscar_detalhe_empresa(cod_cvm_bruto)
+        time.sleep(0.25)
+
+        if not detalhe or detalhe.get("hasQuotation") != "S":
+            continue
+
+        cod_cvm_padronizado = cod_cvm_bruto.zfill(6)   # zfill só aqui, pro registro salvo
+
+        for ticker in _tickers_validos(detalhe.get("otherCodes")):
+            registros.append({
+                "ticker": ticker,
+                "nome_pregao": detalhe.get("tradingName", "").strip(),
+                "cod_cvm": cod_cvm_padronizado,
+                "segmento": emp.get("segment", "").strip(),
+            })
+
+        if (i + 1) % 50 == 0:
+            print(f"  {i + 1}/{len(empresas_brutas)} empresas processadas")
+
+    print(f"Total de tickers negociáveis: {len(registros)}")
     if not registros:
         return pd.DataFrame()
     return pd.DataFrame(registros).drop_duplicates(subset=["ticker"])
 
+
+# ─────────────────────────────────────────────────────────────
+# CVM — CNPJ, setor, situação cadastral
+# ─────────────────────────────────────────────────────────────
 
 def buscar_cnpj_cvm():
     print("Baixando CNPJs da CVM...")
@@ -90,23 +149,21 @@ def buscar_cnpj_cvm():
     return ativas
 
 
+# ─────────────────────────────────────────────────────────────
+# Mapa consolidado ticker ↔ CNPJ (com cache)
+# ─────────────────────────────────────────────────────────────
 
 def construir_mapa_ticker_cnpj():
     """
     Usa primeiro o cache local.
     Se não existir, baixa novamente da B3/CVM.
     """
-
-    # 1. tenta carregar cache
     df_cache = carregar_mapa_csv()
-
     if not df_cache.empty:
         print(f"Cache encontrado: {len(df_cache)} registros")
         return df_cache
 
-    # 2. fallback: baixar da internet
     print("Cache não encontrado. Baixando da B3/CVM...")
-
     df_b3  = buscar_empresas_b3()
     df_cvm = buscar_cnpj_cvm()
 
@@ -114,23 +171,14 @@ def construir_mapa_ticker_cnpj():
         raise RuntimeError("Falha ao obter dados da B3 e CVM.")
 
     df = pd.merge(df_b3, df_cvm, on="cod_cvm", how="left")
-
     df["nome"] = df["nome_cvm"].fillna(df["nome_pregao"])
-
     df["tipo"] = df["ticker"].apply(_inferir_tipo)
-
     df = df.drop_duplicates(subset=["ticker"])
 
     salvar_mapa_csv(df)
 
-    return df[[
-        "ticker",
-        "nome",
-        "cnpj",
-        "setor",
-        "cod_cvm",
-        "tipo"
-    ]]
+    return df[["ticker", "nome", "cnpj", "setor", "cod_cvm", "tipo"]]
+
 
 def salvar_mapa_csv(df, caminho=CACHE_PATH):
     os.makedirs(os.path.dirname(caminho), exist_ok=True)
@@ -140,22 +188,15 @@ def salvar_mapa_csv(df, caminho=CACHE_PATH):
 
 def carregar_mapa_csv(caminho=CACHE_PATH):
     if os.path.exists(caminho):
-
         df = pd.read_csv(
             caminho,
-            dtype={
-                "ticker": str,
-                "cnpj": str,
-                "cod_cvm": str,
-            }
+            dtype={"ticker": str, "cnpj": str, "cod_cvm": str},
         )
-
         df["cnpj"] = df["cnpj"].fillna("").str.strip()
         df["cod_cvm"] = df["cod_cvm"].fillna("").str.zfill(6)
-
         return df
-
     return pd.DataFrame()
+
 
 def _inferir_tipo(ticker):
     t = str(ticker).upper()

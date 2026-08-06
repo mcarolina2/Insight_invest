@@ -59,7 +59,7 @@ CONTAS_BP_ATIVO = {
 }
 
 CONTAS_BP_PASSIVO = {
-    "2":        "passivo_total",
+   # "2":        "passivo_total",
     "2.01":     "passivo_circulante",
     "2.01.04":  "emprestimos_cp",
     "2.02":     "passivo_nao_circulante",
@@ -115,50 +115,49 @@ def baixar_arquivo_cvm(tipo: str, ano: int) -> pd.DataFrame:
             )
 
     logger.info(f"Linhas carregadas: {len(df):,}")
+    print(csv_name)
     return df
 
 
-def filtrar_contas(df: pd.DataFrame, contas_interesse: dict) -> pd.DataFrame:
-    """
-    Filtra o DataFrame mantendo apenas as contas de interesse
-    e renomeia VL_CONTA para o nome amigável do mapeamento.
+def filtrar_contas(df, contas_interesse):
 
-    Args:
-        df:                DataFrame bruto da CVM
-        contas_interesse:  Dict {codigo_conta: nome_coluna}
-
-    Returns:
-        DataFrame pivotado: uma linha por empresa/data, colunas = indicadores
-    """
     codigos = list(contas_interesse.keys())
 
-    # Alterado de "CONTA" para "CD_CONTA" nestas duas linhas:
-    filtrado = df[df["CD_CONTA"].isin(codigos)].copy()
-    filtrado["INDICADOR"] = filtrado["CD_CONTA"].map(contas_interesse)
+    filtrado = df.copy()
 
-    # Alterado de "CONTA" para "CD_CONTA" no subset:
-    filtrado = filtrado.sort_values("DT_REFER").drop_duplicates(
-        subset=["CNPJ_CIA", "CD_CONTA"], keep="last"
+    # somente exercício atual
+    filtrado = filtrado[
+        filtrado["ORDEM_EXERC"] == "ÚLTIMO"
+    ]
+
+    # somente última versão
+    filtrado = (
+        filtrado
+        .sort_values(["DT_REFER","VERSAO","ORDEM_EXERC"])
+        .drop_duplicates(
+            subset=["CNPJ_CIA", "DT_REFER", "CD_CONTA"],
+            keep="last"
+        )
     )
 
-    # Pivota: empresa × indicador (O resto continua igualzinho)
+    # somente contas desejadas
+    filtrado = filtrado[
+        filtrado["CD_CONTA"].isin(codigos)
+    ]
+
+    filtrado["INDICADOR"] = filtrado["CD_CONTA"].map(contas_interesse)
+
     pivot = filtrado.pivot_table(
         index=["CNPJ_CIA", "DENOM_CIA", "DT_REFER"],
         columns="INDICADOR",
         values="VL_CONTA",
-        aggfunc="last",
+        aggfunc="last"
     ).reset_index()
 
-    pivot.columns.name = None
     return pivot
 
 
 def extrair_bp(ano: int) -> pd.DataFrame:
-    """
-    Extrai e une Balanço Ativo + Passivo para um determinado ano.
-    Retorna um DataFrame com uma linha por empresa contendo todos
-    os indicadores de ativo e passivo.
-    """
     df_ativo  = baixar_arquivo_cvm("BPA", ano)
     df_passivo = baixar_arquivo_cvm("BPP", ano)
 
@@ -173,11 +172,7 @@ def extrair_bp(ano: int) -> pd.DataFrame:
     bp["ano"] = ano
     return bp
 
-
 def extrair_dre(ano: int) -> pd.DataFrame:
-    """
-    Extrai a DRE (Demonstração de Resultado do Exercício) para um ano.
-    """
     df_dre = baixar_arquivo_cvm("DRE", ano)
     dre = filtrar_contas(df_dre, CONTAS_DRE)
     dre["ano"] = ano
@@ -207,8 +202,9 @@ def extrair_historico(anos: list[int]) -> tuple[pd.DataFrame, pd.DataFrame]:
     df_bp  = pd.concat(bps,  ignore_index=True) if bps  else pd.DataFrame()
     df_dre = pd.concat(dres, ignore_index=True) if dres else pd.DataFrame()
 
+     
     return df_bp, df_dre
-
+     
 
 # ---------------------------------------------------------------------------
 # Cruzamento ticker ↔ CNPJ
@@ -233,3 +229,11 @@ def carregar_mapa_cnpj_ticker() -> pd.DataFrame:
     # Mantém apenas empresas com situação ativa
     df = df[df["SIT"] == "ATIVO"].copy()
     return df[["CNPJ_CIA", "DENOM_CIA", "COD_CVM", "SETOR_ATIV"]]
+
+
+if __name__ == "__main__":
+    print("Iniciando teste...")
+
+    bp = extrair_bp(2023)
+
+    print(bp.head())

@@ -1,44 +1,8 @@
-"""
-Calculador de indicadores fundamentalistas a partir do BP e DRE.
-
-Recebe os DataFrames do cvm_extractor e retorna um dicionário de
-indicadores prontos para popular a tabela KpiMicro.
-
-Indicadores calculados:
-  LIQUIDEZ
-    - Liquidez Corrente   = AC / PC
-    - Liquidez Seca       = (AC - Estoques) / PC
-    - Liquidez Imediata   = Caixa / PC
-    - Liquidez Geral      = (AC + RLP) / (PC + PNC)
-
-  ENDIVIDAMENTO
-    - Dívida Bruta        = Empréstimos CP + LP
-    - Dívida Líquida      = Dívida Bruta - Caixa
-    - Dívida/EBITDA
-    - Dívida/PL
-
-  RENTABILIDADE
-    - ROE  = Lucro Líquido / PL
-    - ROA  = Lucro Líquido / Ativo Total
-    - ROIC = NOPAT / Capital Investido
-    - Margem Bruta     = Resultado Bruto / Receita Líquida
-    - Margem EBITDA    = EBITDA / Receita Líquida
-    - Margem Líquida   = Lucro Líquido / Receita Líquida
-
-  CRESCIMENTO
-    - CAGR Receita (vs ano anterior)
-    - CAGR Lucro  (vs ano anterior)
-
-  EBITDA (calculado)
-    EBITDA = EBIT + Depreciação/Amortização
-    Aproximação usada quando D&A não disponível:
-    EBITDA ≈ Resultado Operacional (3.05) + Depreciação estimada
-"""
-
 import logging
-
 import numpy as np
 import pandas as pd
+from services.extractors.cvm_extractor import extrair_bp, baixar_arquivo_cvm, filtrar_contas, CONTAS_BP_ATIVO, CONTAS_BP_PASSIVO
+
 
 logger = logging.getLogger(__name__)
 
@@ -187,6 +151,7 @@ def calcular_kpis_micro(bp_row: dict, dre_row: dict, dre_anterior: dict = None) 
     emp_cp     = bp_row.get("emprestimos_cp", 0) or 0
     emp_lp     = bp_row.get("emprestimos_lp", 0) or 0
     pl         = bp_row.get("patrimonio_liquido", 0) or 0
+    
 
     # Extrai valores da DRE
     receita     = dre_row.get("receita_liquida", 0) or 0
@@ -194,7 +159,7 @@ def calcular_kpis_micro(bp_row: dict, dre_row: dict, dre_anterior: dict = None) 
     res_oper    = dre_row.get("resultado_operacional", 0) or 0
     lucro       = dre_row.get("lucro_liquido", 0) or 0
 
-    # Cálculos derivados
+     # Cálculos derivados
     db          = divida_bruta(emp_cp, emp_lp)
     dl          = divida_liquida(emp_cp, emp_lp, caixa)
     ebitda_val  = calcular_ebitda(res_oper)
@@ -206,8 +171,8 @@ def calcular_kpis_micro(bp_row: dict, dre_row: dict, dre_anterior: dict = None) 
         cresc_receita = crescimento_yoy(receita, dre_anterior.get("receita_liquida") or 0)
         cresc_lucro   = crescimento_yoy(lucro,   dre_anterior.get("lucro_liquido") or 0)
 
-    # Giro do ativo = Receita / Ativo Total
     giro_at = round(receita / at, 4) if at and at != 0 else None
+    # (linhas de "prio"/"print" removidas — referenciavam 'bp', que não existe neste escopo)
 
     return {
         # Liquidez
@@ -244,28 +209,19 @@ def calcular_kpis_micro(bp_row: dict, dre_row: dict, dre_anterior: dict = None) 
 
 
 def processar_dataframe(df_bp: pd.DataFrame, df_dre: pd.DataFrame) -> pd.DataFrame:
-    """
-    Processa DataFrames completos de BP e DRE e retorna um DataFrame
-    com todos os KPIs calculados por empresa e por ano.
-    Pronto para bulk_create no Django.
-    """
     resultados = []
 
     for cnpj, grupo_bp in df_bp.groupby("CNPJ_CIA"):
         grupo_dre = df_dre[df_dre["CNPJ_CIA"] == cnpj].sort_values("ano")
-
         anos_disponiveis = sorted(grupo_bp["ano"].unique())
 
         for i, ano in enumerate(anos_disponiveis):
-            bp_row  = grupo_bp[grupo_bp["ano"] == ano].iloc[0].to_dict()
+            bp_row = grupo_bp[grupo_bp["ano"] == ano].iloc[0].to_dict()
             dre_rows = grupo_dre[grupo_dre["ano"] == ano]
-
             if dre_rows.empty:
                 continue
-
             dre_row = dre_rows.iloc[0].to_dict()
 
-            # Pega DRE do ano anterior para calcular crescimento
             dre_ant = None
             if i > 0:
                 ano_ant = anos_disponiveis[i - 1]
@@ -275,14 +231,28 @@ def processar_dataframe(df_bp: pd.DataFrame, df_dre: pd.DataFrame) -> pd.DataFra
 
             kpis = calcular_kpis_micro(bp_row, dre_row, dre_ant)
             kpis.update({
-                "cnpj":     cnpj,
-                "empresa":  bp_row.get("DENOM_CIA", ""),
-                "ano":      ano,
+                "cnpj": cnpj,
+                "empresa": bp_row.get("DENOM_CIA", ""),
+                "ano": ano,
                 "data_ref": bp_row.get("DT_REFER", ""),
             })
             resultados.append(kpis)
 
-    return pd.DataFrame(resultados)
+    return pd.DataFrame(resultados) 
 
 
+if __name__ == "__main__":
+    print("Teste BP")
+
+    bp = extrair_bp(2023)
+
+    print("\nColunas:")
+    print(bp.columns.tolist())
+
+    print("\nPrimeiras linhas:")
+    print(bp.head())
+
+    print("\nPRIO:")
+    prio = bp[bp["DENOM_CIA"].str.contains("PRIO", case=False, na=False)]
+    print(prio.T)
 

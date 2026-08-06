@@ -357,8 +357,8 @@ def calcular_scores_v2(perfil: str = 'intermediario') -> pd.DataFrame:
             auto_adjust=True,
             progress=False
         )["Close"]
-
-        retornos = precos.pct_change().dropna()
+        precos = precos.dropna(axis=1, how="all")
+        retornos = precos.pct_change(fill_method=None).dropna()
 
         if len(retornos) > 30:
 

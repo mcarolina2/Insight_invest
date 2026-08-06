@@ -91,3 +91,15 @@ class ItemRecomendacao(models.Model):
  
     def __str__(self):
         return f"[{self.tipo.upper()}] {self.ativo.ticker} — {self.percentual_ideal}%"
+
+class CarteiraRecomendada(models.Model):
+    perfil = models.CharField(max_length=20)  # 'conservador', 'intermediario', 'arrojado'
+    data_calculo = models.DateField(auto_now_add=True)
+    composicao = models.JSONField()  # lista de {ticker, setor, score_final, pct_markowitz}
+    ativo = models.BooleanField(default=True)  # só a mais recente de cada perfil fica ativa
+
+    class Meta:
+        ordering = ['-data_calculo']
+
+    def __str__(self):
+        return f"{self.perfil} — {self.data_calculo}"
