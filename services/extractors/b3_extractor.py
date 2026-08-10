@@ -35,7 +35,7 @@ def _buscar_pagina_b3(pagina):
     payload_b64 = base64.b64encode(json.dumps(payload).encode()).decode()
     url = B3_URL + payload_b64
     try:
-        r = requests.get(url, headers=HEADERS_B3, timeout=15)
+        r = requests.get(url, headers=HEADERS_B3, timeout=20)
         if r.status_code != 200 or not r.text.strip():
             return []
         dados = r.json()
@@ -52,18 +52,23 @@ def _buscar_pagina_b3(pagina):
 # GetDetail — tickers reais por empresa
 # ─────────────────────────────────────────────────────────────
 
-def buscar_detalhe_empresa(cod_cvm):
-    """Busca os tickers reais de uma empresa via GetDetail."""
+def buscar_detalhe_empresa(cod_cvm, tentativas=4, timeout=25):
+    """Busca os tickers reais de uma empresa via GetDetail, com retry automático."""
     payload = {"codeCVM": str(cod_cvm), "language": "pt-br"}
     payload_b64 = base64.b64encode(json.dumps(payload).encode()).decode()
-    try:
-        r = requests.get(GETDETAIL_URL + payload_b64, headers=HEADERS_B3, timeout=15)
-        if r.status_code != 200 or not r.text.strip() or r.text.strip() == "{}":
-            return None
-        return r.json()
-    except Exception as e:
-        logger.warning(f"GetDetail cod_cvm={cod_cvm}: {e}")
-        return None
+
+    for tentativa in range(1, tentativas + 1):
+        try:
+            r = requests.get(GETDETAIL_URL + payload_b64, headers=HEADERS_B3, timeout=timeout)
+            if r.status_code != 200 or not r.text.strip() or r.text.strip() == "{}":
+                return None
+            return r.json()
+        except Exception as e:
+            if tentativa == tentativas:
+                logger.warning(f"GetDetail cod_cvm={cod_cvm} falhou após {tentativas} tentativas: {e}")
+                return None
+            time.sleep(2 * tentativa)  # espera progressiva: 2s, 4s, 6s, 8s...
+    return None
 
 
 def _tickers_validos(other_codes):
@@ -76,7 +81,7 @@ def _tickers_validos(other_codes):
     return validos
 
 
-def buscar_empresas_b3():
+def buscar_empresas_b3(checkpoint_path="data/_checkpoint_b3.csv"):
     empresas_brutas, pagina = [], 1
     print("Listando empresas da B3", end="", flush=True)
     while True:
@@ -89,17 +94,35 @@ def buscar_empresas_b3():
         time.sleep(0.4)
     print(f" {len(empresas_brutas)} empresas ativas listadas")
 
-    print("Buscando tickers reais por empresa (GetDetail)...")
+    # carrega checkpoint anterior, se existir (retomada)
     registros = []
-    for i, emp in enumerate(empresas_brutas):
-        cod_cvm_bruto = str(emp.get("codeCVM", "")).strip()   # sem zfill — pra chamada da API
-        detalhe = buscar_detalhe_empresa(cod_cvm_bruto)
-        time.sleep(0.25)
+    cod_cvms_ja_processados = set()
+    if os.path.exists(checkpoint_path):
+        df_ckpt = pd.read_csv(checkpoint_path, dtype={"cod_cvm": str})
+        if not df_ckpt.empty:
+            registros = df_ckpt.to_dict("records")
+            cod_cvms_ja_processados = set(df_ckpt["cod_cvm"].astype(str))
+            print(f"Checkpoint encontrado: retomando de {len(cod_cvms_ja_processados)} empresas já processadas")
 
-        if not detalhe or detalhe.get("hasQuotation") != "S":
+    print("Buscando tickers reais por empresa (GetDetail)...")
+    total_falhas = 0
+    for i, emp in enumerate(empresas_brutas):
+        cod_cvm_bruto = str(emp.get("codeCVM", "")).strip()
+
+        if cod_cvm_bruto in cod_cvms_ja_processados:
+            continue  # já processado num run anterior, pula
+
+        detalhe = buscar_detalhe_empresa(cod_cvm_bruto)
+        time.sleep(0.4)  # espaça as chamadas para reduzir pressão na API da B3
+
+        if not detalhe:
+            total_falhas += 1
             continue
 
-        cod_cvm_padronizado = cod_cvm_bruto.zfill(6)   # zfill só aqui, pro registro salvo
+        if detalhe.get("hasQuotation") != "S":
+            continue
+
+        cod_cvm_padronizado = cod_cvm_bruto.zfill(6)
 
         for ticker in _tickers_validos(detalhe.get("otherCodes")):
             registros.append({
@@ -109,14 +132,18 @@ def buscar_empresas_b3():
                 "segmento": emp.get("segment", "").strip(),
             })
 
-        if (i + 1) % 50 == 0:
-            print(f"  {i + 1}/{len(empresas_brutas)} empresas processadas")
+        # salva checkpoint a cada 100 empresas processadas
+        if (i + 1) % 100 == 0:
+            pd.DataFrame(registros).to_csv(checkpoint_path, index=False)
+            print(f"  {i + 1}/{len(empresas_brutas)} empresas processadas (checkpoint salvo, {total_falhas} falhas até agora)")
 
-    print(f"Total de tickers negociáveis: {len(registros)}")
+    # salva checkpoint final também
+    pd.DataFrame(registros).to_csv(checkpoint_path, index=False)
+
+    print(f"Total de tickers negociáveis: {len(registros)} | Empresas com falha definitiva: {total_falhas}")
     if not registros:
         return pd.DataFrame()
     return pd.DataFrame(registros).drop_duplicates(subset=["ticker"])
-
 
 # ─────────────────────────────────────────────────────────────
 # CVM — CNPJ, setor, situação cadastral
