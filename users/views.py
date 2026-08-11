@@ -1,7 +1,3 @@
-"""
-users/views.py — com rastreamento do perfil sugerido pela carteira coringa.
-"""
-
 from django.contrib.auth import authenticate, login, logout
 from django.contrib.auth.decorators import login_required
 from django.shortcuts import redirect, render

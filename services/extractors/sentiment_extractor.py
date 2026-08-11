@@ -1,26 +1,3 @@
-"""
-Extrator de sentimento do mercado financeiro.
-
-Fluxo:
-  1. Scraping de manchetes (InfoMoney, Valor Econômico, Reuters Brasil)
-  2. Busca de posts via Reddit API (r/investimentos, r/BrasilFinancas)
-  3. Análise de sentimento com modelo NLP (FinBERT-PT-BR ou fallback VADER)
-  4. Persistência em SentimentoMercado com score entre -1 e +1
-
-Instalação:
-  pip install requests beautifulsoup4 transformers torch praw
-
-Configuração (variáveis de ambiente):
-  REDDIT_CLIENT_ID      → app registrado em reddit.com/prefs/apps
-  REDDIT_CLIENT_SECRET  → secret do app Reddit
-  REDDIT_USER_AGENT     → ex: "InsightInvest/1.0 by u/seu_usuario"
-
-Modelos NLP disponíveis (em ordem de preferência):
-  1. lucas-leme/FinBERT-PT-BR   (português, domínio financeiro) ← ideal
-  2. neuralmind/bert-base-portuguese-cased (português genérico)
-  3. ProsusAI/finbert            (inglês, domínio financeiro)   ← fallback
-"""
-
 import logging
 import os
 import re

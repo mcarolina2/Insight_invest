@@ -1,31 +1,3 @@
-"""
-Extrator de indicadores macroeconômicos do Banco Central do Brasil.
-
-Fontes:
-  BCB SGS (Sistema Gerenciador de Séries Temporais)
-  → api.bcb.gov.br/dados/serie/bcdata.sgs.{codigo}/dados
-
-  BCB OLINDA (câmbio PTAX oficial)
-  → olinda.bcb.gov.br/olinda/servico/PTAX
-
-Séries utilizadas:
-  432   → Selic Meta (% a.a.)
-  433   → IPCA mensal (%)
-  189   → IGP-M mensal (%)
-  4380  → IBC-Br (proxy mensal do PIB, índice)
-  7326  → PIB trimestral (variação % vs trimestre anterior)
-  2383  → Exportações FOB (US$ milhões)
-  2384  → Importações FOB (US$ milhões)
-  24369 → Taxa de desemprego PNAD (%)
-  1     → Dólar (taxa de câmbio - venda)
-  4189  → CDS Brasil 5 anos (risco-país) — via IPEADATA
-
-Como usar:
-  python manage.py load_macro_data
-  python manage.py load_macro_data --meses 24
-  python manage.py load_macro_data --serie selic
-"""
-
 import logging
 from datetime import datetime, date, timedelta
 from typing import Optional

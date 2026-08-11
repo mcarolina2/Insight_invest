@@ -1,13 +1,3 @@
-"""
-scoring/services/motor_scoring_v2.py
-
-Versão melhorada do motor de scoring que:
-  1. Diferencia os perfis pelos CRITÉRIOS DE FILTRO (não só pelos pesos)
-  2. Usa dados disponíveis (micro + macro) sem depender de time/sentimento
-  3. Delega o peso de cada ativo para otimização matemática (scipy)
-  4. Converte np.float64 → float nativo para serialização JSON
-"""
-
 import logging
 from datetime import date, timedelta
 from decimal import Decimal

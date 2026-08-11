@@ -1,14 +1,3 @@
-"""
-Salve em: market_data/management/commands/load_tickers_b3.py
-
-Execução:
-  python manage.py load_tickers_b3              # baixa tudo da B3 + CVM
-  python manage.py load_tickers_b3 --cache      # usa CSV salvo (sem rebaixar)
-  python manage.py load_tickers_b3 --force      # recria todos os registros
-
-Este comando resolve o problema de "Sem ativo cadastrado: 3471".
-Deve ser o PRIMEIRO comando a rodar antes de qualquer load_*_data.
-"""
 
 import logging
 import os

@@ -1,11 +1,3 @@
-"""
-scoring/views.py
-
-Views para a interface de carteira otimizada com Markowitz.
-Inclui endpoint AJAX que recebe os filtros de risco/retorno
-e retorna a nova composição da carteira em JSON.
-"""
-
 import json
 from django.contrib.auth.decorators import login_required
 from django.http import JsonResponse

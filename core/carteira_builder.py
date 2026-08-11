@@ -1,19 +1,3 @@
-"""
-Salve como: core/carteira_builder.py
-
-Módulo isolado para construir as carteiras coringa da home.
-Separado do views.py para facilitar debug e teste.
-
-Teste rápido no shell:
-  python manage.py shell
-  from core.carteira_builder import montar_carteiras_home
-  import json
-  resultado = montar_carteiras_home()
-  print(json.dumps(resultado))   # se funcionar, JSON está ok
-  for perfil, ativos in resultado.items():
-      print(f"{perfil}: {len(ativos)} ativos")
-"""
-
 import logging
 from decimal import Decimal
 

@@ -1,13 +1,3 @@
-"""
-Salve em: market_data/management/commands/load_price_data.py
-
-Execução:
-  python manage.py load_price_data --tickers PETR4 VALE3 ITUB4
-  python manage.py load_price_data --todos              # todos os ativos do banco
-  python manage.py load_price_data --todos --anos 3     # só 3 anos de histórico
-  python manage.py load_price_data --todos --apenas-info # só atualiza nome/setor
-"""
-
 import logging
 
 from django.core.management.base import BaseCommand, CommandError

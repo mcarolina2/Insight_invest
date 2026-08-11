@@ -1,16 +1,3 @@
-"""
-Salve em: market_data/management/commands/load_valuation_data.py
-
-Preenche os campos de valuation do KpiMicro que dependem do preço da ação:
-  pl, pvpa, dy, ev_ebitda
-  lucro_por_acao, valor_patrimonial_acao
-  dividendo_por_acao, rentabilidade_dividendos, distribuicao_dividendos
-
-Execução:
-  python manage.py load_valuation_data --todos
-  python manage.py load_valuation_data --tickers PETR4 VALE3 ITUB4
-"""
-
 import logging
 import math
 import warnings

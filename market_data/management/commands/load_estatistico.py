@@ -1,12 +1,3 @@
-"""
-Salve em: market_data/management/commands/load_estatistico.py
-
-Execução:
-  python manage.py load_estatistico                    # todos os ativos
-  python manage.py load_estatistico --tickers PETR4 VALE3
-  python manage.py load_estatistico --janela 252       # 1 ano (padrão)
-  python manage.py load_estatistico --janela 126       # 6 meses
-"""
 
 import logging
 from datetime import date

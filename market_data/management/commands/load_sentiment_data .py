@@ -1,21 +1,3 @@
-"""
-Salve em: market_data/management/commands/load_sentiment_data.py
-
-Execução:
-  python manage.py load_sentiment_data
-  python manage.py load_sentiment_data --tickers PETR4 VALE3
-  python manage.py load_sentiment_data --sem-modelo
-  python manage.py load_sentiment_data --apenas-exibir
-
-Pré-requisitos:
-  pip install requests beautifulsoup4 transformers torch
-
-  Para o Reddit (opcional), adicione ao .env:
-    REDDIT_CLIENT_ID=seu_id
-    REDDIT_CLIENT_SECRET=seu_secret
-    REDDIT_USER_AGENT=InsightInvest/1.0
-"""
-
 import logging
 
 from django.core.management.base import BaseCommand, CommandError

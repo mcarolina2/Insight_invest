@@ -1,24 +1,3 @@
-"""
-Extrator de dados da CVM (Comissão de Valores Mobiliários)
-Fonte oficial: https://dados.cvm.gov.br
-
-Baixa os arquivos DFP (anuais) e ITR (trimestrais) diretamente do portal
-de dados abertos da CVM, extraindo Balanço Patrimonial e DRE.
-
-Arquivos disponíveis por ano:
-  dfp_cia_aberta_BPA_con_{ano}.zip  → Balanço Ativo Consolidado
-  dfp_cia_aberta_BPP_con_{ano}.zip  → Balanço Passivo Consolidado
-  dfp_cia_aberta_DRE_con_{ano}.zip  → Demonstração de Resultado
-
-Estrutura dos arquivos CSV (campos principais):
-  CNPJ_CIA   → CNPJ da empresa
-  DENOM_CIA  → Nome da empresa
-  DT_REFER   → Data de referência
-  CONTA      → Código da conta (ex: "1.01" = Ativo Circulante)
-  DS_CONTA   → Descrição da conta
-  VL_CONTA   → Valor da conta (em R$ mil)
-"""
-
 import io
 import zipfile
 import logging

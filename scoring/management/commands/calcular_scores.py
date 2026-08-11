@@ -1,13 +1,3 @@
-"""
-Salve em: scoring/management/commands/calcular_scores.py
-
-Execucao:
-  python manage.py calcular_scores
-  python manage.py calcular_scores --perfil conservador
-  python manage.py calcular_scores --usuario carolina
-  python manage.py calcular_scores --apenas-scores
-"""
-
 import logging
 from datetime import date
 
