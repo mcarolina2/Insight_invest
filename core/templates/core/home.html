@@ -32,10 +32,10 @@
   .container { max-width: 1140px; margin: 0 auto; padding: 28px 16px; }
 
   .section-title { font-size: 16px; font-weight: 600; margin: 28px 0 14px; }
-
+  .grid-4 {display: grid; grid-template-columns: repeat(4, 1fr);gap: 12px; margin-bottom: 20px;  }
   .grid-5 { display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; margin-bottom: 12px; }
   .grid-2 { display: grid; grid-template-columns: 1.1fr 1fr; gap: 14px; }
-  .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+  .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px;margin-bottom: 20px;}
   @media(max-width:900px) { .grid-5 { grid-template-columns: repeat(2,1fr); } }
   @media(max-width:760px) { .grid-2, .grid-3 { grid-template-columns: 1fr; } }
 
@@ -116,8 +116,6 @@
 <div class="ticker-tape">
   {% if macro %}
   <span>Selic <b>{{ macro.selic }}%</b></span>
-  <span>IPCA <b class="down">{{ macro.ipca_mensal }}%</b></span>
-  <span>PIB <b class="up">+{{ macro.pib_trimestral }}%</b></span>
   {% endif %}
   {% if score_macro %}
   <span>Score macro <b class="{% if score_macro < 40 %}down{% else %}up{% endif %}">{{ score_macro|floatformat:0 }}/100</b></span>
@@ -127,7 +125,7 @@
 <div class="container">
 
   <div class="section-title">📊 Rankings de Ativos</div>
-  <div class="grid-5">
+  <div class="grid-4">
     <div class="card">
       <div class="card-title">Maior Score</div>
       {% for r in ranking_score %}
@@ -171,19 +169,7 @@
       </div>
       {% empty %}<p style="color:#999;font-size:12px">Sem dados.</p>{% endfor %}
     </div>
-
-    <div class="card">
-      <div class="card-title">Maior Sentimento</div>
-      {% for r in ranking_sentimento %}
-      <div class="rank-row">
-        <span class="rank-pos">{{ r.posicao }}</span>
-        <span class="rank-ticker">{{ r.ticker }}</span>
-        <span class="rank-valor">{{ r.valor }}</span>
-      </div>
-      {% empty %}<p style="color:#999;font-size:12px">Sem dados.</p>{% endfor %}
     </div>
-  </div>
-
   <div class="section-title">💼 Carteiras Ideais por Perfil — veja um gostinho</div>
   <div class="grid-3">
     {% for c in carteiras_coringa %}
@@ -209,7 +195,7 @@
         </div>
         {% endfor %}
         {% if c.qtd_total > 4 %}
-        <div class="coringa-mais">🔒 +{{ c.qtd_total|add:"-4" }} ativos disponíveis no plano Pro</div>
+        <div class="coringa-mais">🔒 +{{ c.qtd_total|add:"-4" }} ativos disponíveis após o cadastro.</div>
         {% endif %}
       {% endif %}
 
@@ -233,11 +219,7 @@
       <div class="card-title">🏦 Radar macroeconômico</div>
       {% if macro %}
       <table class="macro-table">
-        <tr><td>Selic meta</td><td>{{ macro.selic }}% a.a.</td></tr>
-        <tr><td>IPCA mensal</td><td>{{ macro.ipca_mensal }}%</td></tr>
-        <tr><td>PIB trimestral</td><td>{{ macro.pib_trimestral }}%</td></tr>
-        <tr><td>Desemprego</td><td>{{ macro.desemprego|default:"—" }}%</td></tr>
-        <tr><td>Balança comercial</td><td>{{ macro.balanca_comercial|default:"—" }}</td></tr>
+        <tr><td>Selic</td><td>{{ macro.selic }}% a.a.</td></tr>
       </table>
       {% else %}<p style="color:#999;font-size:13px">Dados macro ainda não carregados.</p>{% endif %}
     </div>
@@ -245,7 +227,7 @@
 
   <div class="cta-banner">
     <div style="font-size:15px;font-weight:600">Quer a carteira completa para o seu perfil?</div>
-    <div style="font-size:13px;opacity:.85;margin-top:4px">Cadastre-se grátis e responda o quiz para liberar a versão Pro</div>
+    <div style="font-size:13px;opacity:.85;margin-top:4px">Cadastre-se grátis e responda o quiz </div>
     <a href="{% url 'users:login' %}">Criar conta gratuita</a>
   </div>
 
