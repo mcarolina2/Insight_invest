@@ -107,11 +107,16 @@
 
 <div class="hero">
   <h1>Análise quantitativa de ações com dados fundamentalistas, macro e sentimento</h1>
-  <div class="search-box">
-    <input type="text" placeholder="Pesquise por ticker ou empresa">
-    <button>Buscar</button>
-  </div>
-</div>
+<form class="search-box" method="GET" action="{% url 'core:buscar_ativo' %}">
+  <input
+    type="text"
+    name="q"
+    placeholder="Pesquise por ticker"
+    autocomplete="off"
+    required
+  >
+  <button type="submit">Buscar</button>
+</form>
 
 <div class="ticker-tape">
   {% if macro %}

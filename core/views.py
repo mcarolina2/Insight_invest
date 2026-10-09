@@ -1,11 +1,12 @@
 import json
-from django.shortcuts import render
+from django.shortcuts import render , redirect
 from django.http import JsonResponse
 from django.views.decorators.http import require_GET
-from django.shortcuts import render
 from scoring.models import CarteiraRecomendada
 from market_data.models import KpiMacro, KpiMicro
 from scoring.services.motor_scoring_v2 import PERFIS, calcular_score_macro
+from django.db.models import Q
+
 
 # ─────────────────────────────────────────────────────────────
 # HELPERS
@@ -396,3 +397,43 @@ def similares_ajax(request, ticker):
     ]
 
     return JsonResponse({'similares': resultado, 'setor': ativo.setor or ''})
+
+@require_GET
+def buscar_ativo(request):
+    from portfolio.models import Ativo
+
+    q = request.GET.get('q', '').strip()
+
+    if not q:
+        return redirect('core:home')
+
+    # Primeiro tenta encontrar o ticker exatamente
+    ativo = (
+        Ativo.objects
+        .filter(ticker__iexact=q)
+        .first()
+    )
+
+    # Se não encontrou, procura o texto dentro do ticker ou nome
+    if not ativo:
+        ativo = (
+            Ativo.objects
+            .filter(
+                Q(ticker__icontains=q) |
+                Q(nome__icontains=q)
+            )
+            .first()
+        )
+
+    if ativo:
+        return JsonResponse({
+            'encontrado': True,
+            'id': ativo.id,
+            'ticker': ativo.ticker,
+            'nome': ativo.nome,
+        })
+
+    return JsonResponse({
+        'encontrado': False,
+        'mensagem': f'Ativo "{q}" não encontrado.'
+    })

@@ -1,6 +1,7 @@
 import logging
 from datetime import date, timedelta
 from decimal import Decimal
+from pypfopt import risk_models, expected_returns
 
 import numpy as np
 import pandas as pd
@@ -42,7 +43,7 @@ PERFIS = {
         'score_min':      30,
         'qtd_ativos':     10,
         'max_pct_ativo':  0.15,
-        'pesos': {'micro': 0.40, 'macro': 0.30, 'estat': 0.15, 'time': 0.15},
+        'pesos': {'micro': 0.40, 'macro': 0.30, 'estat': 0.15},
         'micro_pesos': {
             'liquidez':       0.25,
             'rentabilidade':  0.35,   # intermediário equilibra
@@ -56,7 +57,7 @@ PERFIS = {
         'score_min':      25,
         'qtd_ativos':     15,
         'max_pct_ativo':  0.12,
-        'pesos': {'micro': 0.30, 'macro': 0.20, 'estat': 0.20, 'time': 0.30},
+        'pesos': {'micro': 0.30, 'macro': 0.20, 'estat': 0.20},
         'micro_pesos': {
             'liquidez':       0.10,   # arrojado foca em crescimento
             'rentabilidade':  0.40,
@@ -316,6 +317,8 @@ def calcular_scores_v2(perfil: str = 'intermediario') -> pd.DataFrame:
     # ─────────────────────────────────────────────────────────────
     # 7. Seleciona os melhores ativos
     # ─────────────────────────────────────────────────────────────
+    # adicionar logo antes da linha "df = df.sort_values(by="score_final", ascending=False)"
+
 
     df = df.sort_values(
         by="score_final",
@@ -329,17 +332,25 @@ def calcular_scores_v2(perfil: str = 'intermediario') -> pd.DataFrame:
     # ─────────────────────────────────────────────────────────────
     # 8. Alocação via Markowitz
     # ─────────────────────────────────────────────────────────────
-
     try:
         import yfinance as yf
         from pypfopt import EfficientFrontier
+        from pypfopt import risk_models, expected_returns
 
         tickers = top_df.index.tolist()
 
-        yahoo_tickers = [
-            f"{ticker}.SA"
-            for ticker in tickers
-        ]
+        if not tickers:
+            raise Exception("Nenhum ativo selecionado pelo scoring")
+
+        yahoo_tickers = [f"{ticker}.SA" for ticker in tickers]
+
+        logger.info(
+            f"Ativos selecionados para Markowitz: {yahoo_tickers}"
+        )
+
+        # ==========================================================
+        # 1. DOWNLOAD DOS PREÇOS
+        # ==========================================================
 
         precos = yf.download(
             yahoo_tickers,
@@ -347,35 +358,155 @@ def calcular_scores_v2(perfil: str = 'intermediario') -> pd.DataFrame:
             auto_adjust=True,
             progress=False
         )["Close"]
-        precos = precos.dropna(axis=1, how="all")
-        retornos = precos.pct_change(fill_method=None).dropna()
 
-        if len(retornos) > 30:
+        # Caso apenas um ticker seja retornado
+        if isinstance(precos, pd.Series):
+            precos = precos.to_frame()
 
-            mu = retornos.mean() * 252
-            cov = retornos.cov() * 252
+        # ==========================================================
+        # 2. REMOVER ATIVOS SEM HISTÓRICO
+        # ==========================================================
 
-            ef = EfficientFrontier(
-                mu,
-                cov,
-                weight_bounds=(
-                    0.05,
-                    cfg.get("max_pct_ativo", 0.20)
-                )
+        precos = precos.dropna(
+            axis=1,
+            how="all"
+        )
+
+        if precos.empty:
+            raise Exception(
+                "Yahoo Finance não retornou preços válidos"
             )
 
-            ef.max_sharpe()
+        # ==========================================================
+        # 3. EXIGIR HISTÓRICO MÍNIMO
+        # ==========================================================
 
-            pesos = ef.clean_weights()
+        minimo_observacoes = 252
 
-            top_df["pct_markowitz"] = (
-                top_df.index.map(
-                    lambda t: pesos.get(f"{t}.SA", 0) * 100
-                )
-            ).round(2)
+        precos = precos.dropna(
+            axis=1,
+            thresh=minimo_observacoes
+        )
 
-        else:
-            raise Exception("Histórico insuficiente")
+        if precos.shape[1] < 2:
+            raise Exception(
+                "Menos de dois ativos possuem histórico suficiente"
+            )
+
+        # ==========================================================
+        # 4. PREENCHER PEQUENAS LACUNAS
+        # ==========================================================
+
+        precos = precos.ffill()
+
+        # Remove datas que ainda possuem valores ausentes
+        precos = precos.dropna()
+
+        if len(precos) < 252:
+            raise Exception(
+                "Histórico temporal insuficiente para otimização"
+            )
+
+        logger.info(
+            f"Ativos válidos para Markowitz: "
+            f"{list(precos.columns)}"
+        )
+
+        logger.info(
+            f"Observações utilizadas: {len(precos)}"
+        )
+
+        # ==========================================================
+        # 5. RETORNO ESPERADO
+        # ==========================================================
+
+        mu = expected_returns.mean_historical_return(
+            precos,
+            compounding=True
+        )
+
+        # ==========================================================
+        # 6. COVARIÂNCIA COM LEDOIT-WOLF
+        # ==========================================================
+
+        cov = risk_models.CovarianceShrinkage(
+            precos
+        ).ledoit_wolf()
+
+        # ==========================================================
+        # 7. MARKOWITZ
+        # ==========================================================
+        max_pct = cfg.get(
+            "max_pct_ativo",
+            0.20
+        )
+
+        # Número de ativos que realmente chegaram ao Markowitz
+        n_ativos = len(precos.columns)
+
+        if n_ativos == 0:
+            raise ValueError(
+                "Nenhum ativo possui dados válidos para o Markowitz."
+            )
+
+        # O teto máximo precisa permitir que os pesos somem 100%.
+        # Ex.: com 4 ativos, teto de 20% permitiria no máximo 80%.
+        teto_minimo_viavel = 1.0 / n_ativos
+
+        peso_maximo = max(
+            max_pct,
+            teto_minimo_viavel
+        )
+
+        logger.info(
+            f"Markowitz | ativos={n_ativos} | "
+            f"teto_configurado={max_pct:.2%} | "
+            f"teto_utilizado={peso_maximo:.2%}"
+        )
+
+        # Não obrigamos cada ativo a receber peso mínimo.
+        # O otimizador pode atribuir peso zero.
+        logger.info("========== DIAGNÓSTICO MARKOWITZ ==========")
+        logger.info(f"Colunas de preços: {list(precos.columns)}")
+        logger.info(f"Formato dos preços: {precos.shape}")
+        logger.info(f"Formato de mu: {mu.shape}")
+        logger.info(f"Formato de cov: {cov.shape}")
+        logger.info(f"NaN em mu: {mu.isna().sum()}")
+        logger.info(f"NaN em cov: {cov.isna().sum().sum()}")
+        logger.info(f"Teto utilizado: {peso_maximo:.2%}")
+        logger.info("===========================================")
+
+
+        
+        ef = EfficientFrontier(
+            mu,
+            cov,
+            weight_bounds=(0, peso_maximo)
+        )
+
+        ef.max_sharpe()
+
+        pesos = ef.clean_weights()
+
+        logger.info(
+            f"Pesos Markowitz: {pesos}"
+        )
+
+        # ==========================================================
+        # 8. TRANSFERIR PESOS PARA O DATAFRAME
+        # ==========================================================
+
+        top_df["pct_alocacao"] = (
+            top_df.index.map(
+                lambda ticker:
+                    pesos.get(
+                        f"{ticker}.SA",
+                        0
+                    ) * 100
+            )
+        ).round(2)
+
+        top_df["metodo_alocacao"] = "Markowitz"
 
     except Exception as e:
 
@@ -383,15 +514,22 @@ def calcular_scores_v2(perfil: str = 'intermediario') -> pd.DataFrame:
             f"Markowitz falhou: {e}"
         )
 
-        total_score = float(
-            top_df["score_final"].sum()
-        ) or 1
+        # ==========================================================
+        # FALLBACK
+        # ==========================================================
 
-        top_df["pct_markowitz"] = (
+        total_score = (
+            float(top_df["score_final"].sum())
+            or 1
+        )
+
+        top_df["pct_alocacao"] = (
             top_df["score_final"]
             / total_score
             * 100
         ).round(2)
+
+        top_df["metodo_alocacao"] = "Score fallback"
 
     return top_df.reset_index()
 def calcular_scores_todos_ativos(
