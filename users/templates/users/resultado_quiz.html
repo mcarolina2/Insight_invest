@@ -1,0 +1,12 @@
+
+
+
+<h1>Seu perfil: {{ resultado.perfil|title }}</h1>
+<p>Pontuação: {{ resultado.pontos }} de 21.</p>
+{% if resultado.vetos %}
+<p>Seu perfil foi limitado ao conservador por: {{ resultado.vetos|join:", " }}.</p>
+{% endif %}
+<p><small>Este questionário é uma ferramenta educacional inspirada nas dimensões da
+Resolução CVM nº 30/2021 e não constitui análise de perfil regulada nem recomendação
+de investimento.</small></p>
+<a href="{% url 'scoring:carteira' %}">Ver minha carteira</a>

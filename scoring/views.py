@@ -4,6 +4,8 @@ from django.http import JsonResponse
 from django.shortcuts import render
 from django.views.decorators.http import require_POST
 from django.db.models import F
+from users.views import perfil_obrigatorio
+from users.models import perfil_do_usuario
 
 
 @login_required
@@ -143,3 +145,15 @@ def otimizar_ajax(request):
 
     except Exception as e:
         return JsonResponse({"erro": str(e)}, status=500)
+
+
+@perfil_obrigatorio
+def carteira_view(request):
+    perfil = perfil_do_usuario(request.user)      # nunca mais "intermediario" por padrão
+    ...
+
+@perfil_obrigatorio
+@require_POST
+def otimizar_ajax(request):
+    perfil = perfil_do_usuario(request.user)
+    ...

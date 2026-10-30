@@ -1,6 +1,52 @@
 from django.contrib.auth import authenticate, login, logout
 from django.contrib.auth.decorators import login_required
 from django.shortcuts import redirect, render
+from functools import wraps
+from django.contrib import messages
+from django.contrib.auth import login
+from django.contrib.auth.decorators import login_required
+from django.contrib.auth.forms import UserCreationForm
+from django.shortcuts import redirect, render
+from .models import PerfilRisco, perfil_do_usuario
+from .suitability import PERGUNTAS, classificar
+
+
+def perfil_obrigatorio(view):
+    """Redireciona para o quiz quem ainda não tem perfil definido."""
+    @wraps(view)
+    @login_required
+    def _wrapped(request, *args, **kwargs):
+        if perfil_do_usuario(request.user) is None:
+            messages.info(request, "Responda o questionário para liberar sua carteira.")
+            return redirect("users:quiz")
+        return view(request, *args, **kwargs)
+    return _wrapped
+
+
+def registro(request):
+    form = UserCreationForm(request.POST or None)
+    if form.is_valid():
+        login(request, form.save())
+        return redirect("users:quiz")
+    return render(request, "users/registro.html", {"form": form})
+
+
+@login_required
+def quiz(request):
+    if request.method == "POST":
+        try:
+            r = classificar({p["id"]: request.POST.get(p["id"]) for p in PERGUNTAS})
+        except ValueError as e:
+            return render(request, "users/quiz.html",
+                          {"perguntas": PERGUNTAS, "erro": str(e),
+                           "marcadas": request.POST})
+        PerfilRisco.objects.update_or_create(
+            user=request.user,
+            defaults={"tipo": r["perfil"], "pontuacao": r["pontos"],
+                      "respostas": r["respostas"]},
+        )
+        return render(request, "users/resultado.html", {"resultado": r})
+    return render(request, "users/quiz.html", {"perguntas": PERGUNTAS})
 
 
 def _precisa_quiz(user):

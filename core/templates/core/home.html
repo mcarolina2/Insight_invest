@@ -114,7 +114,8 @@
     placeholder="Pesquise por ticker"
     autocomplete="off"
     required
-  >
+  />
+</div>
   <button type="submit">Buscar</button>
 </form>
 
@@ -234,6 +235,7 @@
     <div style="font-size:15px;font-weight:600">Quer a carteira completa para o seu perfil?</div>
     <div style="font-size:13px;opacity:.85;margin-top:4px">Cadastre-se grátis e responda o quiz </div>
     <a href="{% url 'users:login' %}">Criar conta gratuita</a>
+    <p>Ainda não tem conta? <a href="{% url 'users:registro' %}">Cadastre-se e descubra seu perfil</a></p>
   </div>
 
 </div>

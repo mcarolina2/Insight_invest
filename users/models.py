@@ -1,37 +1,28 @@
 from django.db import models
 from django.contrib.auth.models import AbstractUser
+from django.conf import settings
+
 # Create your models here.
 
  
 class PerfilRisco(models.Model):
-    """
-    Precisa ser criado antes de User (FK em User aponta para cá).
-    Populado via fixtures ou painel admin com os 3 perfis fixos.
-    """
-    TIPO_CHOICES = [
-        ('conservador',   'Conservador'),
-        ('intermediario', 'Intermediário'),
-        ('arrojado',      'Arrojado'),
-    ]
- 
-    tipo      = models.CharField(max_length=20, choices=TIPO_CHOICES, unique=True)
-    score_min = models.IntegerField()
-    score_max = models.IntegerField()
-    descricao = models.TextField(blank=True)
- 
-    # Parâmetros de alocação máxima por classe de ativo para esse perfil
-    # Usados pelo motor de recomendação ao montar a carteira ideal
-    max_renda_variavel_pct = models.DecimalField(
-        max_digits=5, decimal_places=2, default=100,
-        help_text="% máximo permitido em renda variável"
-    )
- 
-    class Meta:
-        verbose_name = "Perfil de Risco"
-        verbose_name_plural = "Perfis de Risco"
- 
-    def __str__(self):
-        return self.tipo
+    TIPOS = [("conservador", "Conservador"),
+             ("intermediario", "Intermediário"),
+             ("arrojado", "Arrojado")]
+
+    user = models.OneToOneField(settings.AUTH_USER_MODEL,
+                                on_delete=models.CASCADE,
+                                related_name="perfil_risco_obj")
+    tipo = models.CharField(max_length=20, choices=TIPOS)
+    pontuacao = models.PositiveSmallIntegerField()
+    respostas = models.JSONField(default=dict)
+    atualizado_em = models.DateTimeField(auto_now=True)
+
+
+def perfil_do_usuario(user):
+    """Retorna 'conservador' | 'intermediario' | 'arrojado' ou None se ainda não fez o quiz."""
+    obj = PerfilRisco.objects.filter(user=user).first()
+    return obj.tipo if obj else None
  
  
 class User(AbstractUser):
