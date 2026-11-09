@@ -1,0 +1,35 @@
+# Blueprint do Render: cria o banco PostgreSQL e o serviço web de uma vez.
+# No painel do Render: New > Blueprint > escolha este repositório.
+databases:
+  - name: insight-invest-db
+    databaseName: insightdb
+    user: insight
+    plan: free
+
+services:
+  - type: web
+    name: insight-invest
+    runtime: python
+    plan: free
+    buildCommand: bash build.sh   # "bash" evita erro de permissão quando o commit vem do Windows
+    startCommand: gunicorn Insight_invest.wsgi:application --workers 1 --threads 4 --timeout 120
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.8
+      - key: DATABASE_URL
+        fromDatabase:
+          name: insight-invest-db
+          property: connectionString
+      - key: SECRET_KEY
+        generateValue: true
+      - key: DEBUG
+        value: "False"
+      - key: WEB_CONCURRENCY
+        value: "1"
+      # Seu usuário administrador. O Render pede os valores ao criar o Blueprint.
+      - key: DJANGO_SUPERUSER_USERNAME
+        sync: false
+      - key: DJANGO_SUPERUSER_EMAIL
+        sync: false
+      - key: DJANGO_SUPERUSER_PASSWORD
+        sync: false

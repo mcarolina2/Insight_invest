@@ -90,11 +90,14 @@ class Command(BaseCommand):
         # Mapa CNPJ → objeto Ativo
         # IMPORTANTE: o model Ativo precisa ter um campo 'cnpj' (CharField)
         # Se ainda não tiver, adicione e rode makemigrations + migrate
-        ativos_por_cnpj = {
-            a.cnpj: a
-            for a in Ativo.objects.filter(cnpj__isnull=False)
-            if a.cnpj
-        }
+        # Uma companhia pode ter mais de um ticker (ON, PN, unit): todos recebem
+        # os mesmos indicadores. A chave é o CNPJ só com dígitos.
+        from collections import defaultdict
+        from services.extractors.fca_extractor import so_digitos
+        ativos_por_cnpj = defaultdict(list)
+        for a in Ativo.objects.filter(cnpj__isnull=False, ativo=True):
+            if a.cnpj:
+                ativos_por_cnpj[so_digitos(a.cnpj)].append(a)
 
         import math
 
@@ -113,43 +116,44 @@ class Command(BaseCommand):
         kpis_batch = []
 
         for _, row in df_kpis.iterrows():
-            ativo    = ativos_por_cnpj.get(str(row.get("cnpj", "")))
+            ativos   = ativos_por_cnpj.get(so_digitos(row.get("cnpj", "")), [])
             data_ref = row.get("data_ref")
 
-            if not ativo:
+            if not ativos:
                 sem_ativo += 1
                 continue
 
             if not data_ref:
                 continue
 
-            # Pula se ja existe e --force nao foi informado
-            if not force and KpiMicro.objects.filter(ativo=ativo, data_ref=data_ref).exists():
-                ignorados += 1
-                continue
+            for ativo in ativos:
+                # Pula se ja existe e --force nao foi informado
+                if not force and KpiMicro.objects.filter(ativo=ativo, data_ref=data_ref).exists():
+                    ignorados += 1
+                    continue
 
-            kpis_batch.append(KpiMicro(
-                ativo               = ativo,
-                data_ref            = data_ref,
-                # --- Liquidez ---
-                liquidez_corrente   = limpar(row.get("liquidez_corrente")),
-                liquidez_seca       = limpar(row.get("liquidez_seca")),
-                liquidez_imediata   = limpar(row.get("liquidez_imediata")),
-                liquidez_geral      = limpar(row.get("liquidez_geral")),
-                # --- Rentabilidade ---
-                roe                 = limpar(row.get("roe")),
-                roa                 = limpar(row.get("roa")),
-                giro_ativo          = limpar(row.get("giro_ativo")),
-                margem_liquida      = limpar(row.get("margem_liquida")),
-                margem_ebitda       = limpar(row.get("margem_ebitda")),
-                # --- Endividamento ---
-                divida_liquida      = limpar(row.get("divida_liquida")),
-                divida_ebitda       = limpar(row.get("divida_ebitda")),
-                # --- Crescimento (requer 2+ anos consecutivos) ---
-                crescimento_receita = limpar(row.get("crescimento_receita")),
-                crescimento_lucro   = limpar(row.get("crescimento_lucro")),
-                # pl, pvpa, dy, lucro_por_acao etc. vem do load_price_data
-            ))
+                kpis_batch.append(KpiMicro(
+                    ativo               = ativo,
+                    data_ref            = data_ref,
+                    # --- Liquidez ---
+                    liquidez_corrente   = limpar(row.get("liquidez_corrente")),
+                    liquidez_seca       = limpar(row.get("liquidez_seca")),
+                    liquidez_imediata   = limpar(row.get("liquidez_imediata")),
+                    liquidez_geral      = limpar(row.get("liquidez_geral")),
+                    # --- Rentabilidade ---
+                    roe                 = limpar(row.get("roe")),
+                    roa                 = limpar(row.get("roa")),
+                    giro_ativo          = limpar(row.get("giro_ativo")),
+                    margem_liquida      = limpar(row.get("margem_liquida")),
+                    margem_ebitda       = limpar(row.get("margem_ebitda")),
+                    # --- Endividamento ---
+                    divida_liquida      = limpar(row.get("divida_liquida")),
+                    divida_ebitda       = limpar(row.get("divida_ebitda")),
+                    # --- Crescimento (requer 2+ anos consecutivos) ---
+                    crescimento_receita = limpar(row.get("crescimento_receita")),
+                    crescimento_lucro   = limpar(row.get("crescimento_lucro")),
+                    # pl, pvpa, dy, lucro_por_acao etc. vem do load_price_data
+                ))
 
         salvos = 0
         if kpis_batch:

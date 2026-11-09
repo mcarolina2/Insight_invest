@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>{% block titulo %}Insight Invest{% endblock %}</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>📈</text></svg>">
+<style>
+  :root{--bg:#0f1117;--surface:#181c27;--surface2:#1e2336;--border:#2a3050;--text:#e8eaf6;
+        --muted:#8b93a7;--accent:#6c63ff;--green:#22c55e;--amber:#f59e0b;--red:#ef4444}
+  *{box-sizing:border-box}
+  body{margin:0;font-family:system-ui,-apple-system,'Segoe UI',sans-serif;background:var(--bg);color:var(--text);
+       min-height:100vh;display:flex;flex-direction:column}
+  a{color:var(--accent)}
+  .topo{display:flex;align-items:center;justify-content:space-between;padding:14px 24px;border-bottom:1px solid var(--border)}
+  .topo .marca{font-weight:700;color:var(--text);text-decoration:none}
+  .busca-topo{flex:1;max-width:260px;margin:0 16px}
+  .busca-topo input{margin:0;padding:7px 12px;font-size:13px}
+  .topo nav a{margin-left:16px;color:var(--muted);text-decoration:none;font-size:14px}
+  .topo nav a:hover{color:var(--text)}
+  main{flex:1;width:100%;max-width:{% block largura %}640px{% endblock %};margin:0 auto;padding:32px 20px}
+  .card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:24px;margin-bottom:16px}
+  h1{font-size:22px;margin:0 0 16px}
+  label{font-size:13px;color:var(--muted);display:block;margin-bottom:4px}
+  input[type=text],input[type=password]{width:100%;padding:10px 12px;background:var(--bg);border:1px solid var(--border);
+       border-radius:8px;color:var(--text);font-size:14px;margin-bottom:12px}
+  .btn{display:inline-block;padding:11px 18px;background:var(--accent);color:#fff;border:none;border-radius:8px;
+       font-size:14px;cursor:pointer;text-decoration:none}
+  .btn:hover{background:#5b52e0}
+  .btn:disabled{opacity:.4;cursor:not-allowed}
+  .btn:disabled:hover{background:var(--accent)}
+  .btn.secundario{background:transparent;border:1px solid var(--border);color:var(--text)}
+  .msg{padding:10px 12px;border-radius:8px;font-size:13px;margin-bottom:16px;background:var(--surface2)}
+  .msg.erro{background:#1f0e0e;color:var(--red)}
+  .muted{color:var(--muted);font-size:13px}
+  .aviso-legal{font-size:11px;color:var(--muted);text-align:center;padding:16px 20px;border-top:1px solid var(--border)}
+  {% block estilo %}{% endblock %}
+</style>
+</head>
+<body>
+<header class="topo">
+  <a class="marca" href="{% url 'core:home' %}">📈 Insight Invest</a>
+  <form action="{% url 'core:buscar_ativo' %}" method="get" class="busca-topo">
+    <input type="text" name="q" placeholder="Buscar ativo (ex.: PETR4)" required>
+  </form>
+  <nav>
+    {% if user.is_authenticated %}
+      <a href="{% url 'scoring:carteira' %}">Minha carteira</a>
+      <a href="{% url 'users:perfis' %}">Perfis</a>
+      <a href="{% url 'users:perfil' %}">Meu perfil</a>
+      <a href="{% url 'billing:upgrade' %}">Planos</a>
+      <a href="{% url 'users:logout' %}">Sair</a>
+    {% else %}
+      <a href="{% url 'users:perfis' %}">Perfis</a>
+      <a href="{% url 'users:login' %}">Entrar</a>
+      <a href="{% url 'users:registro' %}">Criar conta</a>
+    {% endif %}
+  </nav>
+</header>
+<main>
+  {% for m in messages %}<div class="msg">{{ m }}</div>{% endfor %}
+  {% block conteudo %}{% endblock %}
+</main>
+<footer class="aviso-legal">
+  Plataforma acadêmica (TCC — Ciência de Dados para Negócios, UFPB). As carteiras são teóricas e têm
+  finalidade educacional; não constituem recomendação de investimento nos termos da Resolução CVM nº 20/2021.
+  Rentabilidade passada não garante rentabilidade futura.
+</footer>
+{% block script %}{% endblock %}
+</body>
+</html>

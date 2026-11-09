@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% block titulo %}Planos — Insight Invest{% endblock %}
+{% block largura %}760px{% endblock %}
+{% block estilo %}
+  .planos{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+  @media(max-width:640px){.planos{grid-template-columns:1fr}}
+  .plano h2{margin:0 0 4px;font-size:18px}
+  .plano .preco{font-size:24px;font-weight:700;margin:8px 0 14px}
+  .plano ul{padding-left:18px;margin:0 0 8px;font-size:14px;line-height:1.8}
+  .destaque{border-color:var(--accent)}
+{% endblock %}
+{% block conteudo %}
+<h1>Planos</h1>
+{% if ja_e_pro %}
+  <div class="msg">Você já é Pro{% if assinatura.dias_restantes is not None %} — faltam {{ assinatura.dias_restantes }} dias{% endif %}.</div>
+{% elif assinatura.status == 'pendente' %}
+  <div class="msg">Seu pedido de upgrade está pendente de confirmação.</div>
+{% endif %}
+<div class="planos">
+  <div class="card plano">
+    <h2>{{ plano_free.nome_exibicao|default:"Gratuito" }}</h2>
+    <div class="preco">R$ 0</div>
+    <ul>
+      <li>Carteira recomendada para o seu perfil</li>
+      <li>Rankings e radar macroeconômico</li>
+      <li>{% if plano_free.limite_ativos_visiveis %}Até {{ plano_free.limite_ativos_visiveis }} ativos visíveis{% else %}Ativos ilimitados{% endif %}</li>
+    </ul>
+  </div>
+  <div class="card plano destaque">
+    <h2>{{ plano_pro.nome_exibicao|default:"Pro" }}</h2>
+    <div class="preco">R$ {{ preco_simbolico }}<span class="muted">/mês</span></div>
+    <ul>
+      <li>Filtros de risco e retorno com os 4 modelos de otimização</li>
+      <li>Todos os ativos e histórico completo</li>
+      <li>Recálculos ilimitados</li>
+    </ul>
+    {% if not ja_e_pro %}
+    <p class="muted">Pague via Pix para a chave <b>{{ pix_chave }}</b> e clique abaixo. Liberamos o acesso após a confirmação.</p>
+    <form method="post" action="{% url 'billing:solicitar' %}">
+      {% csrf_token %}
+      <button class="btn" type="submit">Já paguei — solicitar upgrade</button>
+    </form>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

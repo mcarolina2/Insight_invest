@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block titulo %}Busca: {{ q }} — Insight Invest{% endblock %}
+{% block conteudo %}
+<h1>Resultados para “{{ q }}”</h1>
+<form method="get" action="{% url 'core:buscar_ativo' %}" style="display:flex;gap:8px;margin-bottom:16px">
+  <input type="text" name="q" value="{{ q }}" style="margin:0" required>
+  <button class="btn" type="submit">Buscar</button>
+</form>
+{% if resultados %}
+<div class="card" style="padding:8px 20px">
+  {% for a in resultados %}
+  <a href="{% url 'core:ativo' a.ticker %}" style="display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--border);text-decoration:none;color:var(--text)">
+    <span><b>{{ a.ticker }}</b> <span class="muted">{{ a.nome }}</span></span>
+    <span class="muted">{{ a.setor|default:a.get_tipo_display }}</span>
+  </a>
+  {% endfor %}
+</div>
+{% if resultados|length == 30 %}<p class="muted">Mostrando os 30 primeiros. Refine a busca.</p>{% endif %}
+{% else %}
+<div class="card"><p>Nenhum ativo encontrado. Tente o código de negociação (ex.: PETR4) ou parte do nome da empresa.</p></div>
+{% endif %}
+{% endblock %}

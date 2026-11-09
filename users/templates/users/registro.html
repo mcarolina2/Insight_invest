@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block titulo %}Criar conta — Insight Invest{% endblock %}
+{% block largura %}420px{% endblock %}
+{% block conteudo %}
+<div class="card">
+  <h1>Criar conta</h1>
+  {% if perfil_sugerido %}<div class="msg">Você escolheu a carteira <b>{{ perfil_sugerido|title }}</b>. Crie sua conta e responda o questionário para confirmar seu perfil.</div>{% endif %}
+  <p class="muted">Depois do cadastro, você responde um questionário rápido (7 perguntas) para definirmos seu perfil de risco.</p>
+  <form method="post">
+    {% csrf_token %}
+    {% for campo in form %}
+      <label for="{{ campo.id_for_label }}">{{ campo.label }}</label>
+      <input type="{% if 'password' in campo.name %}password{% else %}text{% endif %}" name="{{ campo.html_name }}"
+             id="{{ campo.id_for_label }}" value="{{ campo.value|default_if_none:'' }}" required>
+      {% for e in campo.errors %}<div class="msg erro">{{ e }}</div>{% endfor %}
+      {% if campo.name == 'password1' %}<p class="muted" style="margin-top:-6px">Mínimo de 8 caracteres, não pode ser só números.</p>{% endif %}
+    {% endfor %}
+    {% for e in form.non_field_errors %}<div class="msg erro">{{ e }}</div>{% endfor %}
+    <button class="btn" type="submit" style="width:100%">Criar conta</button>
+  </form>
+  <p class="muted" style="margin-top:16px">Já tem conta? <a href="{% url 'users:login' %}">Entrar</a></p>
+</div>
+{% endblock %}

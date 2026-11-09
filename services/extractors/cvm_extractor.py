@@ -98,6 +98,18 @@ def baixar_arquivo_cvm(tipo: str, ano: int) -> pd.DataFrame:
     return df
 
 
+def normalizar_escala(df: pd.DataFrame) -> pd.DataFrame:
+    """Converte VL_CONTA para reais conforme a coluna ESCALA_MOEDA ("MIL" -> x1000)."""
+    if "ESCALA_MOEDA" not in df.columns:
+        return df
+    df = df.copy()
+    df["VL_CONTA"] = pd.to_numeric(df["VL_CONTA"], errors="coerce")
+    em_milhares = df["ESCALA_MOEDA"].astype(str).str.strip().str.upper() == "MIL"
+    df.loc[em_milhares, "VL_CONTA"] = df.loc[em_milhares, "VL_CONTA"] * 1000
+    df["ESCALA_MOEDA"] = "UNIDADE"
+    return df
+
+
 def filtrar_contas(df, contas_interesse):
 
     codigos = list(contas_interesse.keys())
@@ -122,7 +134,13 @@ def filtrar_contas(df, contas_interesse):
     # somente contas desejadas
     filtrado = filtrado[
         filtrado["CD_CONTA"].isin(codigos)
-    ]
+    ].copy()
+
+    # Escala: a CVM publica VL_CONTA em reais ("UNIDADE") ou em milhares ("MIL"),
+    # e a escala pode variar entre empresas e entre anos da MESMA empresa.
+    # Sem converter, o crescimento ano a ano sai multiplicado por 1.000 quando a
+    # empresa muda de escala (origem de valores como 120.000%).
+    filtrado = normalizar_escala(filtrado)
 
     filtrado["INDICADOR"] = filtrado["CD_CONTA"].map(contas_interesse)
 

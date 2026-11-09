@@ -148,56 +148,31 @@ def _enriquecer_ativo(ticker: str, perfil: str) -> dict:
     }
 
 
-def _montar_carteiras(perfis_config: dict) -> dict:
-    """
-    Monta as carteiras de amostra para cada perfil de risco,
-    buscando os dados reais de KpiMicro, KpiTime e Sentimento.
-    """
-    from scoring.services.motor_scoring_v2 import calcular_scores_todos_ativos
-    from portfolio.models import Ativo
+VISUAL_PERFIS = [
+    ("conservador",   "Conservador",   "🛡️", "#22c55e"),
+    ("intermediario", "Intermediário", "⚖️", "#f59e0b"),
+    ("arrojado",      "Arrojado",      "🚀", "#ef4444"),
+]
+ATIVOS_VISIVEIS_HOME = 4
 
-    carteiras = {}
 
-    for perfil, cfg in perfis_config.items():
-        try:
-            df = calcular_scores_todos_ativos(perfil=perfil)
-        except Exception:
-            carteiras[perfil] = []
-            continue
-
-        if df is None or df.empty:
-            carteiras[perfil] = []
-            continue
-
-        df = df[df['score_final'] >= cfg['score_min']]
-        df = df[~df['ticker'].str.contains(' ', na=True)]
-        df = df[df['ticker'].str.len().between(4, 6)]
-
-        top = df.nlargest(cfg['qtd'], 'score_final')
-        total = top['score_final'].sum()
-
-        ativos_info = {
-            a.ticker: a
-            for a in Ativo.objects.filter(ticker__in=top['ticker'].tolist())
-        }
-
-        ativos = []
-        for _, row in top.iterrows():
-            ticker = row['ticker']
-            ativo_obj = ativos_info.get(ticker)
-            pct = round(float(row['score_final']) / total * 100, 1) if total else 0
-            dados = _enriquecer_ativo(ticker, perfil)
-            ativos.append({
-                'ticker': ticker,
-                'nome':   ativo_obj.nome[:20] if ativo_obj else ticker,
-                'pct':    pct,
-                'score':  round(float(row['score_final'])),
-                **dados,
-            })
-
-        carteiras[perfil] = ativos
-
-    return carteiras
+def _carteiras_pre_calculadas() -> list[dict]:
+    """Lê a carteira ativa de cada perfil salva pelo comando atualizar_carteiras.
+    A home não recalcula nada: só consulta o banco, por isso abre rápido."""
+    saida = []
+    for perfil, titulo, icone, cor in VISUAL_PERFIS:
+        cart = (CarteiraRecomendada.objects.filter(perfil=perfil, ativo=True)
+                .order_by('-data_calculo', '-id').first())
+        ativos = cart.composicao if cart else []
+        saida.append({
+            "perfil": perfil, "titulo": titulo, "icone": icone, "cor": cor,
+            "ativos": ativos[:ATIVOS_VISIVEIS_HOME],
+            "qtd_total": len(ativos),
+            "sem_dados": not ativos,
+            "metricas": cart.metricas if cart else {},
+            "data_calculo": cart.data_calculo.isoformat() if cart else None,
+        })
+    return saida
 
 
 # ─────────────────────────────────────────────────────────────
@@ -226,7 +201,7 @@ def home_view(request):
         v = _normalizar_dy(k.dy)
         if v and v <= 30:
             ranking_dy.append({
-                'pos': len(ranking_dy)+1,
+                'posicao': len(ranking_dy)+1,
                 'ticker': k.ativo.ticker,
                 'setor': k.ativo.setor or '—',
                 'valor': v
@@ -281,7 +256,6 @@ def home_view(request):
 
     # ── Macro ────────────────────────────────────────────────────
     macro = KpiMacro.objects.order_by('-data_ref').first()
-    from scoring.services.motor_scoring import calcular_score_macro
     score_macro = calcular_score_macro(macro) if macro else None
 
     # ── Notícias ─────────────────────────────────────────────────
@@ -292,55 +266,16 @@ def home_view(request):
         {
             'texto': n.resumo_nlp[:120],
             'ticker': n.ativo.ticker if n.ativo else None,
-            'label': ('positivo' if float(n.score_sentimento) > 0.15
+            'sentimento_label': ('positivo' if float(n.score_sentimento) > 0.15
                       else 'negativo' if float(n.score_sentimento) < -0.15
                       else 'neutro'),
         }
         for n in noticias_qs
     ]
 
-    # ── Carteiras interativas ─────────────────────────────────────
-    PERFIS_CONFIG = {
-        'conservador':   {'score_min': 55, 'qtd': 5},
-        'intermediario': {'score_min': 45, 'qtd': 6},
-        'arrojado':      {'score_min': 35, 'qtd': 7},
-    }
-    carteiras = _montar_carteiras(PERFIS_CONFIG)
-    
-    carteiras_coringa = [
-    {
-        "perfil": "conservador",
-        "icone": "🛡️",
-        "cor": "#22c55e",
-        "ativos": carteiras.get("conservador", [])[:4],
-        "qtd_total": len(carteiras.get("conservador", [])),
-        "sem_dados": len(carteiras.get("conservador", [])) == 0,
-    },
-    {
-        "perfil": "intermediario",
-        "icone": "⚖️",
-        "cor": "#f59e0b",
-        "ativos": carteiras.get("intermediario", [])[:4],
-        "qtd_total": len(carteiras.get("intermediario", [])),
-        "sem_dados": len(carteiras.get("intermediario", [])) == 0,
-    },
-    {
-        "perfil": "arrojado",
-        "icone": "🚀",
-        "cor": "#ef4444",
-        "ativos": carteiras.get("arrojado", [])[:4],
-        "qtd_total": len(carteiras.get("arrojado", [])),
-        "sem_dados": len(carteiras.get("arrojado", [])) == 0,
-    },
-]
-
-
-    # Serializa para JSON (usado pelo JS do template)
+    # ── Carteiras pré-calculadas (comando atualizar_carteiras) ───
+    carteiras_coringa = _carteiras_pre_calculadas()
     carteiras_json = json.dumps(carteiras_coringa)
-    print("CARTEIRAS:")
-   
-    print("CARTEIRAS_CORINGA:", carteiras_coringa)
-
 
     return render(request, 'core/home.html', {
       'ranking_score':     ranking_score,
@@ -400,40 +335,33 @@ def similares_ajax(request, ticker):
 
 @require_GET
 def buscar_ativo(request):
+    """Busca por ticker ou nome. Um único resultado abre a página do ativo."""
     from portfolio.models import Ativo
 
     q = request.GET.get('q', '').strip()
-
     if not q:
         return redirect('core:home')
 
-    # Primeiro tenta encontrar o ticker exatamente
-    ativo = (
-        Ativo.objects
-        .filter(ticker__iexact=q)
-        .first()
-    )
+    exato = Ativo.objects.filter(ticker__iexact=q).first()
+    if exato:
+        return redirect('core:ativo', ticker=exato.ticker)
 
-    # Se não encontrou, procura o texto dentro do ticker ou nome
-    if not ativo:
-        ativo = (
-            Ativo.objects
-            .filter(
-                Q(ticker__icontains=q) |
-                Q(nome__icontains=q)
-            )
-            .first()
-        )
+    resultados = list(Ativo.objects.filter(Q(ticker__icontains=q) | Q(nome__icontains=q))
+                      .order_by('ticker')[:30])
+    if len(resultados) == 1:
+        return redirect('core:ativo', ticker=resultados[0].ticker)
+    return render(request, 'core/busca.html', {'q': q, 'resultados': resultados})
 
-    if ativo:
-        return JsonResponse({
-            'encontrado': True,
-            'id': ativo.id,
-            'ticker': ativo.ticker,
-            'nome': ativo.nome,
-        })
 
-    return JsonResponse({
-        'encontrado': False,
-        'mensagem': f'Ativo "{q}" não encontrado.'
-    })
+def ativo_view(request, ticker):
+    """Página com tudo o que o Insight Invest sabe sobre um ativo."""
+    from django.shortcuts import get_object_or_404
+    from portfolio.models import Ativo
+    from users.models import perfil_do_usuario
+    from core.ativo_info import montar_contexto_ativo
+
+    ativo = get_object_or_404(Ativo, ticker__iexact=ticker)
+    if ativo.ticker != ticker:
+        return redirect('core:ativo', ticker=ativo.ticker)
+    perfil = perfil_do_usuario(request.user)
+    return render(request, 'core/ativo.html', montar_contexto_ativo(ativo, perfil))

@@ -6,6 +6,7 @@ from django.conf import settings
 
  
 class PerfilRisco(models.Model):
+    """Perfil de risco de cada usuário, definido pelo questionário (users/suitability.py)."""
     TIPOS = [("conservador", "Conservador"),
              ("intermediario", "Intermediário"),
              ("arrojado", "Arrojado")]
@@ -14,13 +15,22 @@ class PerfilRisco(models.Model):
                                 on_delete=models.CASCADE,
                                 related_name="perfil_risco_obj")
     tipo = models.CharField(max_length=20, choices=TIPOS)
-    pontuacao = models.PositiveSmallIntegerField()
-    respostas = models.JSONField(default=dict)
+    pontuacao = models.PositiveSmallIntegerField(default=0)
+    respostas = models.JSONField(default=dict, blank=True)
     atualizado_em = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Perfil de Risco"
+        verbose_name_plural = "Perfis de Risco"
+
+    def __str__(self):
+        return f"{self.user} — {self.get_tipo_display()} ({self.pontuacao} pts)"
 
 
 def perfil_do_usuario(user):
     """Retorna 'conservador' | 'intermediario' | 'arrojado' ou None se ainda não fez o quiz."""
+    if not getattr(user, "is_authenticated", False):
+        return None
     obj = PerfilRisco.objects.filter(user=user).first()
     return obj.tipo if obj else None
  
@@ -34,12 +44,6 @@ class User(AbstractUser):
     renda_mensal = models.DecimalField(
         max_digits=12, decimal_places=2,
         null=True, blank=True
-    )
-    perfil_risco = models.ForeignKey(
-        PerfilRisco,
-        on_delete=models.SET_NULL,
-        null=True, blank=True,
-        related_name='usuarios'
     )
     criado_em = models.DateTimeField(auto_now_add=True)
  
@@ -60,6 +64,9 @@ class User(AbstractUser):
  
 class Pergunta(models.Model):
     """
+    DESCONTINUADO: o questionário atual está em users/suitability.py e as
+    respostas ficam em RespostaQuiz. Modelo mantido só para não apagar dados antigos.
+
     Perguntas do questionário de suitability (perfil de risco).
     Peso determina quanto a resposta contribui para o score total.
     """
@@ -116,3 +123,28 @@ class RespostaUsuario(models.Model):
     def __str__(self):
         return f"{self.user.username} — {self.pergunta.texto[:40]}"
  
+
+class RespostaQuiz(models.Model):
+    """
+    Cada envio do questionário de suitability (histórico completo).
+    O perfil em vigor fica em PerfilRisco; aqui fica o registro de todas as
+    respostas, com data, para auditoria e para a análise do TCC.
+    """
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE,
+                             related_name="respostas_quiz")
+    perfil = models.CharField(max_length=20, choices=PerfilRisco.TIPOS)
+    pontuacao = models.PositiveSmallIntegerField()
+    respostas = models.JSONField(help_text="{id_da_pergunta: alternativa (0 a 3)}")
+    por_dimensao = models.JSONField(default=list, blank=True)
+    vetos = models.JSONField(default=list, blank=True)
+    perfil_sugerido_home = models.CharField(max_length=20, blank=True,
+                                            help_text="Carteira escolhida na home antes do quiz")
+    criado_em = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Resposta do questionário"
+        verbose_name_plural = "Respostas do questionário"
+        ordering = ["-criado_em"]
+
+    def __str__(self):
+        return f"{self.user} — {self.get_perfil_display()} ({self.pontuacao} pts) em {self.criado_em:%d/%m/%Y}"

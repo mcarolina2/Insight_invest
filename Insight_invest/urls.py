@@ -15,18 +15,18 @@ Including another URLconf
     2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))
 """
 from django.contrib import admin
-from django.urls import path
-from django.urls import path, include  
-from scoring.views import carteira_view, otimizar_ajax
+from django.http import HttpResponse
+from django.urls import include, path
 
-
-
+admin.site.site_header = "Insight Invest — administração"
+admin.site.site_title = "Insight Invest"
+admin.site.index_title = "Painel do administrador e do analista"
 
 urlpatterns = [
-    path('admin/',              admin.site.urls),
-    path('',                   include('core.urls')),   
-    path('',                    include('users.urls')),
-    path("carteira/", carteira_view, name="carteira"),
-    path('carteira/otimizar/', otimizar_ajax,  name='otimizar'),
-    path('billing/', include('billing.urls')),
+    path('admin/',    admin.site.urls),
+    path('favicon.ico', lambda r: HttpResponse(status=204)),   # o admin pede este arquivo
+    path('',          include('core.urls')),
+    path('',          include('users.urls')),
+    path('carteira/', include('scoring.urls')),
+    path('billing/',  include('billing.urls')),
 ]

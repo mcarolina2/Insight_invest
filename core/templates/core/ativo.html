@@ -1,0 +1,156 @@
+{% extends "base.html" %}
+{% block titulo %}{{ ativo.ticker }} — Insight Invest{% endblock %}
+{% block largura %}1040px{% endblock %}
+{% block estilo %}
+  .cab{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;flex-wrap:wrap;margin-bottom:16px}
+  .cab h1{margin:0;font-size:26px}
+  .tag{display:inline-block;font-size:11px;padding:3px 10px;border-radius:12px;background:var(--surface2);color:var(--muted);margin:6px 6px 0 0}
+  .preco{text-align:right}
+  .preco .v{font-size:24px;font-weight:700}
+  .grade2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+  @media(max-width:820px){.grade2{grid-template-columns:1fr}}
+  h2{font-size:15px;margin:0 0 12px}
+  .escores{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin:8px 0 12px}
+  .escore{background:var(--surface2);border-radius:10px;padding:10px;text-align:center}
+  .escore .n{font-size:22px;font-weight:700}
+  .escore .r{font-size:11px;color:var(--muted)}
+  .status{padding:10px 12px;border-radius:8px;font-size:13px}
+  .status.sim{background:#052e16;color:#86efac}.status.nao{background:var(--surface2);color:var(--muted)}
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  th,td{padding:7px 6px;border-bottom:1px solid var(--border);text-align:right}
+  th:first-child,td:first-child{text-align:left}
+  th{color:var(--muted);font-weight:500;font-size:12px}
+  td[title]{cursor:help}
+  .perfis-linha{display:flex;justify-content:space-between;gap:12px;padding:8px 0;border-bottom:1px solid var(--border);font-size:13px}
+  .perfis-linha:last-child{border:none}
+  .ok{color:#22c55e}.no{color:var(--muted)}
+  .pos{color:#22c55e}.neg{color:var(--red)}
+{% endblock %}
+{% block conteudo %}
+<div class="cab">
+  <div>
+    <h1>{{ ativo.ticker }}</h1>
+    <div class="muted">{{ ativo.nome }}</div>
+    <span class="tag">{{ ativo.get_tipo_display }}</span>
+    {% if ativo.setor %}<span class="tag">{{ ativo.setor }}</span>{% endif %}
+    {% if ativo.subsetor %}<span class="tag">{{ ativo.subsetor }}</span>{% endif %}
+  </div>
+  {% if grafico %}
+  <div class="preco">
+    <div class="v">R$ {{ grafico.ultimo|floatformat:2 }}</div>
+    <div class="{% if grafico.variacao >= 0 %}pos{% else %}neg{% endif %}">{% if grafico.variacao >= 0 %}+{% endif %}{{ grafico.variacao|floatformat:1 }}% em 12 meses</div>
+  </div>
+  {% endif %}
+</div>
+
+{% if grafico %}
+<div class="card">
+  <h2>Preço ajustado — últimos 12 meses</h2>
+  <canvas id="grafico" width="1000" height="220" style="width:100%"></canvas>
+</div>
+{% endif %}
+
+<div class="grade2">
+  <div class="card">
+    {% with s=situacao_principal %}
+    <h2>Escore no perfil {{ s.nome }}{% if not perfil_usuario %} <span class="muted">(referência)</span>{% endif %}</h2>
+    {% if s.scores %}
+      <div class="escores">
+        <div class="escore"><div class="n">{{ s.scores.score_final|floatformat:0 }}</div><div class="r">Final</div></div>
+        <div class="escore"><div class="n">{{ s.scores.score_micro|floatformat:0 }}</div><div class="r">Fundamentalista</div></div>
+        <div class="escore"><div class="n">{{ s.scores.score_estat|floatformat:0 }}</div><div class="r">Estatístico</div></div>
+        <div class="escore"><div class="n">{{ s.scores.score_macro|floatformat:0 }}</div><div class="r">Macro</div></div>
+      </div>
+      <p class="muted" style="margin:0 0 10px">Posição {{ s.posicao }} de {{ s.total }} ativos avaliados. Escores de 0 a 100, relativos aos demais ativos.</p>
+    {% endif %}
+    <div class="status {% if s.entra %}sim{% else %}nao{% endif %}">{% if s.entra %}✓ Entra na carteira deste perfil. {% endif %}{{ s.motivo }}</div>
+    {% if not perfil_usuario %}<p class="muted" style="margin-top:10px"><a href="{% url 'users:registro' %}">Crie uma conta</a> para ver o escore no seu perfil.</p>{% endif %}
+    {% endwith %}
+  </div>
+
+  <div class="card">
+    <h2>Nos três perfis</h2>
+    {% for s in situacoes %}
+      <div class="perfis-linha">
+        <span><b>{{ s.nome }}</b>{% if s.perfil == perfil_usuario %} <span class="muted">(seu)</span>{% endif %}</span>
+        <span class="{% if s.entra %}ok{% else %}no{% endif %}">
+          {% if s.entra %}entra na carteira{% elif s.scores %}escore {{ s.scores.score_final|floatformat:0 }} · não entra{% else %}sem escore{% endif %}
+        </span>
+      </div>
+    {% endfor %}
+    {% if nas_carteiras %}
+      <p class="muted" style="margin:12px 0 0">Na carteira recomendada da página inicial:
+        {% for c in nas_carteiras %}{{ c.perfil }} ({{ c.pct|floatformat:1 }}%){% if not forloop.last %}, {% endif %}{% endfor %}.</p>
+    {% endif %}
+  </div>
+</div>
+
+<div class="card">
+  <h2>Indicadores fundamentalistas {% if data_dfp %}<span class="muted">(DFP — exercícios encerrados)</span>{% endif %}</h2>
+  {% if fundamentos %}
+  <table>
+    <thead><tr><th>Indicador</th>{% for a in anos_dfp %}<th>{{ a }}</th>{% endfor %}</tr></thead>
+    <tbody>
+    {% for f in fundamentos %}
+      <tr><td title="{{ f.explicacao }}">{{ f.rotulo }} ⓘ</td>{% for v in f.valores %}<td>{{ v }}</td>{% endfor %}</tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="muted">Sem demonstrações financeiras para este ativo.</p>
+  {% endif %}
+</div>
+
+<div class="grade2">
+  <div class="card">
+    <h2>Estatísticas dos retornos {% if data_estat %}<span class="muted">({{ data_estat|date:"d/m/Y" }})</span>{% endif %}</h2>
+    {% if estatisticas %}
+    <table><tbody>
+      {% for e in estatisticas %}<tr><td title="{{ e.explicacao }}">{{ e.rotulo }} ⓘ</td><td>{{ e.valor }}</td></tr>{% endfor %}
+    </tbody></table>
+    {% else %}<p class="muted">Sem estatísticas calculadas.</p>{% endif %}
+  </div>
+  <div class="card">
+    <h2>Mercado {% if data_mercado %}<span class="muted">({{ data_mercado|date:"d/m/Y" }})</span>{% endif %}</h2>
+    {% if mercado %}
+    <table><tbody>
+      {% for rot, val in mercado %}<tr><td>{{ rot }}</td><td>{{ val }}</td></tr>{% endfor %}
+    </tbody></table>
+    {% else %}<p class="muted">Sem dados de mercado.</p>{% endif %}
+  </div>
+</div>
+<p class="muted">Passe o mouse sobre ⓘ para ver o que cada indicador significa.</p>
+{% endblock %}
+
+{% block script %}
+{% if grafico_json %}
+<script>
+(function(){
+  const g = {{ grafico_json|safe }};
+  const c = document.getElementById('grafico'), ctx = c.getContext('2d');
+  const W = c.width, H = c.height, P = {t:12, r:16, b:28, l:72};
+  const min = Math.min(...g.valores), max = Math.max(...g.valores), m = (max-min)*0.08 || 1;
+  const x = i => P.l + i/(g.valores.length-1) * (W-P.l-P.r);
+  const y = v => P.t + (1 - (v-(min-m))/((max+m)-(min-m))) * (H-P.t-P.b);
+  ctx.strokeStyle = '#2a3050'; ctx.fillStyle = '#8b93a7'; ctx.font = '11px system-ui'; ctx.textAlign = 'right';
+  for (let k=0; k<=4; k++){
+    const v = (min-m) + k*((max+m)-(min-m))/4;
+    ctx.beginPath(); ctx.moveTo(P.l, y(v)); ctx.lineTo(W-P.r, y(v)); ctx.stroke();
+    ctx.fillText('R$ '+v.toFixed(2), P.l-6, y(v)+4);
+  }
+  ctx.textAlign = 'center';
+  [[0,'left'], [Math.floor(g.datas.length/2),'center'], [g.datas.length-1,'right']].forEach(([i,al]) => {
+    ctx.textAlign = al; ctx.fillText(g.datas[i], x(i), H-8);
+  });
+  const cor = g.variacao >= 0 ? '#22c55e' : '#ef4444';
+  const grad = ctx.createLinearGradient(0, P.t, 0, H-P.b);
+  grad.addColorStop(0, cor+'55'); grad.addColorStop(1, cor+'00');
+  ctx.beginPath(); g.valores.forEach((v,i)=> i ? ctx.lineTo(x(i), y(v)) : ctx.moveTo(x(i), y(v)));
+  ctx.lineTo(x(g.valores.length-1), H-P.b); ctx.lineTo(x(0), H-P.b); ctx.closePath();
+  ctx.fillStyle = grad; ctx.fill();
+  ctx.beginPath(); g.valores.forEach((v,i)=> i ? ctx.lineTo(x(i), y(v)) : ctx.moveTo(x(i), y(v)));
+  ctx.strokeStyle = cor; ctx.lineWidth = 2; ctx.stroke();
+})();
+</script>
+{% endif %}
+{% endblock %}

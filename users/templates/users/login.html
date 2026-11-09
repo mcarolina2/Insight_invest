@@ -1,38 +1,19 @@
-<!DOCTYPE html>
-<html lang="pt-BR">
-<head>
-  <meta charset="UTF-8">
-  <title>Insight Invest — Login</title>
-  <style>
-    body { font-family: system-ui; background: #0f1117; color: #e8eaf6;
-           display: flex; align-items: center; justify-content: center;
-           min-height: 100vh; }
-    .box { background: #181c27; border: 1px solid #2a3050; border-radius: 12px;
-           padding: 32px; width: 340px; }
-    h1 { font-size: 20px; margin-bottom: 24px; }
-    label { font-size: 12px; color: #6b7280; display: block; margin-bottom: 4px; }
-    input { width: 100%; padding: 10px 12px; background: #0f1117; border: 1px solid #2a3050;
-            border-radius: 8px; color: #e8eaf6; font-size: 14px; margin-bottom: 16px; }
-    input:focus { outline: none; border-color: #6c63ff; }
-    button { width: 100%; padding: 11px; background: #6c63ff; color: #fff;
-             border: none; border-radius: 8px; font-size: 14px; cursor: pointer; }
-    button:hover { background: #5b52e0; }
-    .erro { background: #1f0e0e; color: #ef4444; padding: 10px 12px;
-            border-radius: 8px; font-size: 13px; margin-bottom: 16px; }
-  </style>
-</head>
-<body>
-<div class="box">
-  <h1>📈 Insight Invest</h1>
-  {% if erro %}<div class="erro">{{ erro }}</div>{% endif %}
-  <form method="POST" action="{% url 'users:login' %}">
+{% extends "base.html" %}
+{% block titulo %}Entrar — Insight Invest{% endblock %}
+{% block largura %}400px{% endblock %}
+{% block conteudo %}
+<div class="card">
+  <h1>Entrar</h1>
+  {% if perfil_sugerido %}<div class="msg">Você escolheu a carteira <b>{{ perfil_sugerido|title }}</b>. Entre e responda o questionário para confirmar seu perfil.</div>{% endif %}
+  {% if erro %}<div class="msg erro">{{ erro }}</div>{% endif %}
+  <form method="post" action="{% url 'users:login' %}">
     {% csrf_token %}
-    <label>Usuário</label>
-    <input type="text" name="username" autofocus>
-    <label>Senha</label>
-    <input type="password" name="password">
-    <button type="submit">Entrar</button>
+    <label for="username">Usuário</label>
+    <input type="text" id="username" name="username" autofocus required>
+    <label for="password">Senha</label>
+    <input type="password" id="password" name="password" required>
+    <button class="btn" type="submit" style="width:100%">Entrar</button>
   </form>
+  <p class="muted" style="margin-top:16px">Ainda não tem conta? <a href="{% url 'users:registro' %}">Cadastre-se</a></p>
 </div>
-</body>
-</html>
+{% endblock %}

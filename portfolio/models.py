@@ -26,7 +26,8 @@ class Ativo(models.Model):
     descricao    = models.TextField(blank=True)
     ativo        = models.BooleanField(default=True)
     atualizado_em = models.DateTimeField(auto_now=True)
-    cnpj = models.CharField(max_length=18, null=True, blank=True, unique=True)
+    # Uma companhia (CNPJ) pode ter vários tickers (ON, PN, unit): não é único.
+    cnpj = models.CharField(max_length=18, null=True, blank=True, db_index=True)
  
     def __str__(self):
         return f"{self.ticker} — {self.nome}"

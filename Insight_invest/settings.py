@@ -10,7 +10,16 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/6.0/ref/settings/
 """
 
+import os
 from pathlib import Path
+
+import dj_database_url
+
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -20,12 +29,22 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # See https://docs.djangoproject.com/en/6.0/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure-mkpn-0ccr61lcoa(4yy)0+qpmpbwa2+d-pojvcyk2!00*x+$h9'
+SECRET_KEY = os.environ.get(
+    'SECRET_KEY',
+    'django-insecure-mkpn-0ccr61lcoa(4yy)0+qpmpbwa2+d-pojvcyk2!00*x+$h9',  # só para desenvolvimento local
+)
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = os.environ.get('DEBUG', 'True').lower() in ('1', 'true', 'yes')
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = [h.strip() for h in os.environ.get('ALLOWED_HOSTS', 'localhost,127.0.0.1').split(',') if h.strip()]
+
+# O Render define RENDER_EXTERNAL_HOSTNAME automaticamente (ex.: insight-invest.onrender.com)
+RENDER_EXTERNAL_HOSTNAME = os.environ.get('RENDER_EXTERNAL_HOSTNAME')
+if RENDER_EXTERNAL_HOSTNAME:
+    ALLOWED_HOSTS.append(RENDER_EXTERNAL_HOSTNAME)
+
+CSRF_TRUSTED_ORIGINS = [f'https://{h}' for h in ALLOWED_HOSTS if h not in ('localhost', '127.0.0.1')]
 
 
 AUTH_USER_MODEL = 'users.User'
@@ -52,6 +71,7 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
+    'whitenoise.middleware.WhiteNoiseMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -83,16 +103,19 @@ WSGI_APPLICATION = 'Insight_invest.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/6.0/ref/settings/#databases
 
+# Em produção (Render) usa a variável DATABASE_URL.
+# Localmente continua usando o PostgreSQL da sua máquina.
 DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.postgresql',
-        'NAME': 'insightdb',
-        'USER': 'postgres',
-        'PASSWORD':'root',
-        'HOST':'localhost',
-        'PORT': '5432',
-    }
+    'default': dj_database_url.config(
+        default='postgres://postgres:root@localhost:5432/insightdb',
+        conn_max_age=600,
+    )
 }
+
+# Banco de destino usado só pelo comando copiar_dados (ex.: o banco do Render).
+# Defina DESTINO_DATABASE_URL com a "External Database URL" do Render.
+if os.environ.get('DESTINO_DATABASE_URL'):
+    DATABASES['destino'] = dj_database_url.parse(os.environ['DESTINO_DATABASE_URL'])
 
 
 # Password validation
@@ -117,9 +140,9 @@ AUTH_PASSWORD_VALIDATORS = [
 # Internationalization
 # https://docs.djangoproject.com/en/6.0/topics/i18n/
 
-LANGUAGE_CODE = 'en-us'
+LANGUAGE_CODE = 'pt-br'
 
-TIME_ZONE = 'UTC'
+TIME_ZONE = 'America/Fortaleza'
 
 USE_I18N = True
 
@@ -130,6 +153,29 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/6.0/howto/static-files/
 
 STATIC_URL = 'static/'
+STATIC_ROOT = BASE_DIR / 'staticfiles'
+STORAGES = {
+    'default': {'BACKEND': 'django.core.files.storage.FileSystemStorage'},
+    'staticfiles': {'BACKEND': 'whitenoise.storage.CompressedManifestStaticFilesStorage'},
+}
+
+# Nos testes não há collectstatic: usa o armazenamento simples
+import sys
+if len(sys.argv) > 1 and sys.argv[1] == 'test':
+    STORAGES['staticfiles'] = {'BACKEND': 'django.contrib.staticfiles.storage.StaticFilesStorage'}
+
+# Se algum arquivo estático não estiver no manifesto, serve o nome original
+# em vez de derrubar a página com erro 500.
+WHITENOISE_MANIFEST_STRICT = False
+
+DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+# Segurança em produção (quando DEBUG=False)
+if not DEBUG:
+    SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+    SECURE_SSL_REDIRECT = True
+    SESSION_COOKIE_SECURE = True
+    CSRF_COOKIE_SECURE = True
 
 # Insight_invest/settings.py
 LOGIN_URL      = '/login/'        # onde redirecionar quem não está logado

@@ -1,12 +1,58 @@
+{% extends "base.html" %}
+{% block titulo %}Seu perfil — Insight Invest{% endblock %}
+{% block estilo %}
+  .selo{display:inline-block;padding:4px 14px;border-radius:20px;font-size:13px;font-weight:600;margin-bottom:10px}
+  .selo.conservador{background:#052e16;color:#22c55e}.selo.intermediario{background:#1e1b4b;color:#8b85ff}.selo.arrojado{background:#1c1004;color:#f59e0b}
+  .dim{margin:0 0 12px}
+  .dim .rot{display:flex;justify-content:space-between;font-size:13px;margin-bottom:4px}
+  .barra{height:8px;background:var(--surface2);border-radius:6px;overflow:hidden}
+  .barra div{height:100%;background:var(--accent)}
+  .regras{display:grid;grid-template-columns:1fr 1fr;gap:6px 18px;font-size:13px;margin:10px 0 0}
+  .regras span{color:var(--muted)}
+{% endblock %}
+{% block conteudo %}
+<div class="card">
+  <span class="selo {{ resultado.perfil }}">{{ regras.nome|default:resultado.perfil|title }}</span>
+  <h1>Seu perfil é {{ regras.nome|default:resultado.perfil|title }}</h1>
+  <p>Você fez <b>{{ resultado.pontos }}</b> de {{ resultado.maximo }} pontos.</p>
+  {% if regras.descricao %}<p class="muted">{{ regras.descricao }}</p>{% endif %}
+  {% if resultado.vetos %}
+  <div class="msg">Seu perfil foi definido como conservador, independentemente da pontuação, porque você indicou {{ resultado.vetos|join:" e " }}. A resposta mais restritiva sempre prevalece.</div>
+  {% endif %}
+  {% if perfil_sugerido %}
+    {% if bateu_sugestao %}
+      <p class="muted">O resultado confirma a carteira que você escolheu na página inicial.</p>
+    {% else %}
+      <p class="muted">Na página inicial você escolheu a carteira {{ perfil_sugerido|title }}, mas suas respostas indicam outro perfil. Sua carteira seguirá o perfil indicado pelo questionário.</p>
+    {% endif %}
+  {% endif %}
+</div>
 
+<div class="card">
+  <h1 style="font-size:16px">Como você pontuou</h1>
+  {% for d in resultado.por_dimensao %}
+  <div class="dim">
+    <div class="rot"><span>{{ d.nome }}</span><span>{{ d.pontos }} de {{ d.maximo }}</span></div>
+    <div class="barra"><div style="width:{% widthratio d.pontos d.maximo 100 %}%"></div></div>
+  </div>
+  {% endfor %}
+  <p class="muted" style="margin-top:12px">Faixas: conservador até 8 pontos · intermediário de 9 a 15 · arrojado de 16 a 21.</p>
+</div>
 
-
-<h1>Seu perfil: {{ resultado.perfil|title }}</h1>
-<p>Pontuação: {{ resultado.pontos }} de 21.</p>
-{% if resultado.vetos %}
-<p>Seu perfil foi limitado ao conservador por: {{ resultado.vetos|join:", " }}.</p>
+{% if regras %}
+<div class="card">
+  <h1 style="font-size:16px">O que isso muda na sua carteira</h1>
+  <div class="regras">
+    <span>Ativos na carteira</span><b>até {{ regras.qtd_ativos }}</b>
+    <span>Peso máximo por ativo</span><b>{{ regras.max_pct }}%</b>
+    {% for nome, peso in regras.camadas %}<span>Peso da análise {{ nome|lower }}</span><b>{{ peso }}%</b>{% endfor %}
+    {% if regras.filtros %}<span>Filtros</span><b>{{ regras.filtros|join:"; " }}</b>{% endif %}
+  </div>
+  <p style="margin-top:14px"><a href="{% url 'users:perfis' %}">Comparar os três perfis</a></p>
+</div>
 {% endif %}
-<p><small>Este questionário é uma ferramenta educacional inspirada nas dimensões da
-Resolução CVM nº 30/2021 e não constitui análise de perfil regulada nem recomendação
-de investimento.</small></p>
-<a href="{% url 'scoring:carteira' %}">Ver minha carteira</a>
+
+<a class="btn" href="{% url 'scoring:carteira' %}">Ver minha carteira</a>
+<a class="btn secundario" href="{% url 'users:quiz' %}">Refazer questionário</a>
+<p class="muted" style="margin-top:16px">Ferramenta educacional inspirada na Resolução CVM nº 30/2021; não constitui análise de perfil regulada nem recomendação de investimento.</p>
+{% endblock %}

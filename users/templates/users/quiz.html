@@ -1,19 +1,93 @@
+{% extends "base.html" %}
+{% block titulo %}Questionário de perfil — Insight Invest{% endblock %}
+{% block estilo %}
+  .progresso{height:6px;background:var(--surface2);border-radius:6px;overflow:hidden;margin:6px 0 4px}
+  .progresso div{height:100%;width:0;background:var(--accent);transition:width .25s}
+  .contador{font-size:12px;color:var(--muted);display:flex;justify-content:space-between;margin-bottom:18px}
+  .pergunta{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:22px;margin:0 0 14px}
+  .pergunta .dim{display:inline-block;font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--accent);margin-bottom:6px}
+  .pergunta h2{font-size:17px;margin:0 0 16px;line-height:1.35}
+  .opcao{display:flex;gap:12px;align-items:center;padding:12px 14px;margin:0 0 8px;border:1px solid var(--border);
+         border-radius:10px;font-size:14px;color:var(--text);cursor:pointer;transition:border-color .15s,background .15s}
+  .opcao:hover{border-color:var(--accent)}
+  .opcao input{accent-color:var(--accent);width:16px;height:16px;margin:0}
+  .opcao:has(input:checked){border-color:var(--accent);background:#1e1b4b}
+  .navegacao{display:flex;justify-content:space-between;gap:10px;margin-top:6px}
+  .js .pergunta{display:none}
+  .js .pergunta.atual{display:block}
+  .js .so-sem-js{display:none}
+  .sem-js .so-com-js{display:none}
+{% endblock %}
+{% block conteudo %}
+<h1>{% if refazendo %}Refazer questionário de perfil{% else %}Qual é o seu perfil de investidor?{% endif %}</h1>
+<p class="muted">São 7 perguntas sobre seus objetivos, sua tolerância a perdas e seu conhecimento — dimensões inspiradas na Resolução CVM nº 30/2021. Leva cerca de 1 minuto.</p>
+{% if erro %}<div class="msg erro">{{ erro }}</div>{% endif %}
 
+<div class="so-com-js">
+  <div class="progresso"><div id="barra"></div></div>
+  <div class="contador"><span id="contador">Pergunta 1 de {{ perguntas|length }}</span><span id="dimensao-atual"></span></div>
+</div>
 
-<h1>Qual é o seu perfil de investidor?</h1>
-{% if erro %}<p style="color:#c00">{{ erro }}</p>{% endif %}
-<form method="post">
+<form method="post" id="form-quiz" class="sem-js">
   {% csrf_token %}
   {% for p in perguntas %}
-  <fieldset>
-    <legend>{{ forloop.counter }}. {{ p.texto }}</legend>
+  <fieldset class="pergunta" data-indice="{{ forloop.counter0 }}" style="border:1px solid var(--border)">
+    <span class="dim">{{ p.nome_dimensao }}</span>
+    <h2>{{ forloop.counter }}. {{ p.texto }}</h2>
     {% for op in p.opcoes %}
-    <label>
-      <input type="radio" name="{{ p.id }}" value="{{ forloop.counter0 }}" required>
+    <label class="opcao">
+      <input type="radio" name="{{ p.id }}" value="{{ forloop.counter0 }}" required
+             {% for k, v in marcadas.items %}{% if k == p.id and v == forloop.parentloop.counter0|stringformat:"s" %}checked{% endif %}{% endfor %}>
       {{ op }}
-    </label><br>
+    </label>
     {% endfor %}
   </fieldset>
   {% endfor %}
-  <button type="submit">Ver meu perfil</button>
+
+  <div class="navegacao so-com-js">
+    <button type="button" class="btn secundario" id="voltar">← Voltar</button>
+    <button type="button" class="btn" id="avancar">Próxima →</button>
+    <button type="submit" class="btn" id="enviar" style="display:none">Ver meu perfil</button>
+  </div>
+  <button type="submit" class="btn so-sem-js">Ver meu perfil</button>
 </form>
+{% endblock %}
+
+{% block script %}
+<script>
+(function(){
+  const form = document.getElementById('form-quiz');
+  form.classList.replace('sem-js','js');
+  document.querySelectorAll('.so-com-js').forEach(e=>e.classList.remove('sem-js'));
+  const perguntas = [...form.querySelectorAll('.pergunta')];
+  const total = perguntas.length;
+  let atual = 0;
+  // ao refazer, começa na primeira pergunta sem resposta (ou na primeira)
+  const vazia = perguntas.findIndex(p => !p.querySelector('input:checked'));
+  if (vazia > 0) atual = vazia;
+
+  const respondida = i => !!perguntas[i].querySelector('input:checked');
+  function mostrar(){
+    perguntas.forEach((p,i)=>p.classList.toggle('atual', i===atual));
+    const feitas = perguntas.filter((_,i)=>respondida(i)).length;
+    document.getElementById('barra').style.width = (feitas/total*100)+'%';
+    document.getElementById('contador').textContent = `Pergunta ${atual+1} de ${total}`;
+    document.getElementById('dimensao-atual').textContent = perguntas[atual].querySelector('.dim').textContent;
+    document.getElementById('voltar').style.visibility = atual===0 ? 'hidden' : 'visible';
+    const ultima = atual === total-1;
+    document.getElementById('avancar').style.display = ultima ? 'none' : '';
+    document.getElementById('enviar').style.display = ultima ? '' : 'none';
+    document.getElementById('avancar').disabled = !respondida(atual);
+    document.getElementById('enviar').disabled = perguntas.some((_,i)=>!respondida(i));
+  }
+  form.addEventListener('change', e=>{
+    if (e.target.type !== 'radio') return;
+    mostrar();
+    if (atual < total-1) setTimeout(()=>{ atual++; mostrar(); }, 250);   // avança sozinho
+  });
+  document.getElementById('avancar').onclick = ()=>{ if (respondida(atual) && atual<total-1){ atual++; mostrar(); } };
+  document.getElementById('voltar').onclick = ()=>{ if (atual>0){ atual--; mostrar(); } };
+  mostrar();
+})();
+</script>
+{% endblock %}

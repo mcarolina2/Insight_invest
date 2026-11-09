@@ -1,243 +1,208 @@
-<!DOCTYPE html>
-<html lang="pt-BR">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Insight Invest — Análise quantitativa de ações</title>
-<style>
-  * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { font-family: system-ui, sans-serif; background: #f5f5f5; color: #1a1a1a; }
+{% extends "base.html" %}
+{% block titulo %}Insight Invest — Análise quantitativa de ações{% endblock %}
+{% block largura %}1140px{% endblock %}
+{% block estilo %}
+  /* HOME — mesma paleta do base.html (variáveis --bg, --surface, --accent...) */
+  .hero{background:linear-gradient(135deg,#1e1b4b 0%,var(--surface) 70%);border:1px solid var(--border);
+        border-radius:14px;padding:32px 24px;text-align:center;margin-bottom:14px}
+  .hero h1{font-size:22px;font-weight:600;margin:0 0 6px}
+  .hero p{color:var(--muted);font-size:14px;margin:0 0 18px}
+  .busca-hero{display:flex;max-width:480px;margin:0 auto}
+  .busca-hero input[type=text]{margin:0;border-radius:8px 0 0 8px;padding:11px 16px}
+  .busca-hero .btn{border-radius:0 8px 8px 0}
 
-  .nav { background: #fff; border-bottom: 1px solid #eee; padding: 14px 24px;
-         display: flex; align-items: center; gap: 20px; }
-  .nav .logo { font-weight: 700; font-size: 18px; }
-  .nav .login-btn { margin-left: auto; background: #534AB7; color: #fff;
-                     padding: 7px 16px; border-radius: 8px; font-size: 13px;
-                     text-decoration: none; }
+  .faixa{display:flex;gap:24px;flex-wrap:wrap;font-size:13px;color:var(--muted);background:var(--surface);
+         border:1px solid var(--border);border-radius:10px;padding:10px 16px;margin-bottom:8px}
+  .faixa b{color:var(--text)}
+  .up{color:var(--green)!important} .down{color:var(--red)!important}
 
-  .hero { background: #14141c; color: #fff; padding: 36px 24px; text-align: center; }
-  .hero h1 { font-size: 22px; font-weight: 600; margin-bottom: 16px; }
-  .search-box { display: flex; max-width: 480px; margin: 0 auto; }
-  .search-box input { flex: 1; padding: 11px 16px; border-radius: 8px 0 0 8px;
-                       border: none; font-size: 14px; }
-  .search-box button { padding: 11px 20px; border-radius: 0 8px 8px 0;
-                        background: #534AB7; color: #fff; border: none; font-size: 13px; }
+  .secao{font-size:16px;font-weight:600;margin:28px 0 12px}
+  .grade{display:grid;gap:12px}
+  .g4{grid-template-columns:repeat(4,1fr)} .g3{grid-template-columns:repeat(3,1fr)} .g2{grid-template-columns:1.1fr 1fr}
+  @media(max-width:900px){.g4{grid-template-columns:repeat(2,1fr)}}
+  @media(max-width:760px){.g4,.g3,.g2{grid-template-columns:1fr}}
+  .grade .card{margin:0;padding:16px 18px}
+  .titulo-card{font-size:13px;font-weight:600;margin-bottom:10px;color:var(--text)}
+  .vazio{color:var(--muted);font-size:12px;margin:0}
 
-  .ticker-tape { background: #1a1a24; color: #ccc; padding: 9px 24px;
-                 display: flex; gap: 24px; overflow-x: auto; font-size: 12px;
-                 white-space: nowrap; }
-  .ticker-tape b { color: #fff; }
-  .up { color: #4ade80; } .down { color: #f87171; }
+  .rank{display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--surface2);
+        text-decoration:none;color:inherit}
+  .rank:last-child{border-bottom:none}
+  .rank:hover .rank-ticker{color:var(--accent)}
+  .rank-pos{font-size:11px;color:var(--muted);width:14px}
+  .rank-ticker{font-weight:600;font-size:12px;width:56px}
+  .rank-setor{font-size:11px;color:var(--muted);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .rank-valor{font-size:12px;font-weight:600;color:var(--green)}
+  .rank-valor.azul{color:var(--accent)} .rank-valor.laranja{color:var(--amber)}
 
-  .container { max-width: 1140px; margin: 0 auto; padding: 28px 16px; }
+  /* carteiras de referência */
+  .perfil-card{background:var(--surface);border:1px solid var(--border);border-top:3px solid var(--cor);
+               border-radius:12px;padding:18px 20px;display:flex;flex-direction:column}
+  .perfil-topo{display:flex;align-items:center;gap:10px;margin-bottom:12px}
+  .perfil-icone{font-size:20px}
+  .perfil-titulo{font-size:14px;font-weight:700}
+  .perfil-sub{font-size:11px;color:var(--muted)}
+  .divisao{display:flex;height:8px;border-radius:4px;overflow:hidden;background:var(--surface2);margin-bottom:4px}
+  .divisao .rf{background:#64748b} .divisao .ac{background:var(--cor)}
+  .divisao-leg{display:flex;justify-content:space-between;font-size:11px;color:var(--muted);margin-bottom:10px}
+  .item{display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid var(--surface2)}
+  .item:last-of-type{border-bottom:none}
+  .item-ticker{font-weight:600;font-size:13px;width:84px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .item-ticker a{color:var(--text);text-decoration:none} .item-ticker a:hover{color:var(--accent)}
+  .barra{flex:1;height:6px;background:var(--surface2);border-radius:3px}
+  .barra div{height:6px;border-radius:3px;background:var(--cor)}
+  .barra div.rf{background:#64748b}
+  .item-pct{font-size:12px;font-weight:600;width:44px;text-align:right}
+  .mais{text-align:center;font-size:11px;color:var(--muted);margin-top:8px;padding:6px;
+        background:var(--surface2);border-radius:8px}
+  .perfil-cta{display:block;text-align:center;margin-top:auto;padding:9px;background:var(--cor);color:#0f1117;
+              border-radius:8px;text-decoration:none;font-size:12px;font-weight:700}
+  .perfil-cta-wrap{margin-top:14px}
 
-  .section-title { font-size: 16px; font-weight: 600; margin: 28px 0 14px; }
-  .grid-4 {display: grid; grid-template-columns: repeat(4, 1fr);gap: 12px; margin-bottom: 20px;  }
-  .grid-5 { display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; margin-bottom: 12px; }
-  .grid-2 { display: grid; grid-template-columns: 1.1fr 1fr; gap: 14px; }
-  .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px;margin-bottom: 20px;}
-  @media(max-width:900px) { .grid-5 { grid-template-columns: repeat(2,1fr); } }
-  @media(max-width:760px) { .grid-2, .grid-3 { grid-template-columns: 1fr; } }
+  .noticia{display:flex;align-items:flex-start;gap:9px;padding:9px 0;border-bottom:1px solid var(--surface2)}
+  .noticia:last-child{border-bottom:none}
+  .badge{font-size:10px;font-weight:600;padding:2px 8px;border-radius:20px;flex-shrink:0;margin-top:2px}
+  .badge-positivo{background:#052e1a;color:var(--green)}
+  .badge-negativo{background:#2a0f0f;color:var(--red)}
+  .badge-neutro{background:#2a1f05;color:var(--amber)}
+  .noticia-texto{font-size:13px;line-height:1.45}
+  .macro-tab{width:100%;font-size:13px;border-collapse:collapse}
+  .macro-tab td{padding:6px 0;border-bottom:1px solid var(--surface2)}
+  .macro-tab td:last-child{text-align:right;font-weight:600}
 
-  .card { background: #fff; border-radius: 12px; padding: 16px 18px;
-          box-shadow: 0 1px 3px rgba(0,0,0,.06); }
-  .card-title { font-size: 13px; font-weight: 600; margin-bottom: 12px;
-                display: flex; align-items: center; gap: 6px; color: #333; }
+  .cta{background:linear-gradient(135deg,var(--accent),#4338ca);border-radius:12px;padding:22px 24px;
+       text-align:center;margin-top:24px}
+  .cta .btn{background:#fff;color:#4338ca;font-weight:600;margin-top:12px}
+  .cta .btn:hover{background:#eef}
+  .cta p{font-size:13px;margin:12px 0 0;opacity:.9}
+  .cta p a{color:#fff}
+{% endblock %}
 
-  .rank-row { display: flex; align-items: center; gap: 8px; padding: 6px 0;
-              border-bottom: 1px solid #f3f3f3; }
-  .rank-row:last-child { border-bottom: none; }
-  .rank-pos { font-size: 11px; color: #999; width: 14px; }
-  .rank-ticker { font-weight: 600; font-size: 12px; width: 52px; }
-  .rank-setor { font-size: 11px; color: #888; flex: 1;
-                overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .rank-valor { font-size: 12px; font-weight: 600; color: #1D9E75; }
-  .rank-valor.azul { color: #534AB7; }
-  .rank-valor.laranja { color: #BA7517; }
+{% block conteudo %}
+<section class="hero">
+  <h1>Análise quantitativa de ações</h1>
+  <p>Escore fundamentalista, estatístico e macroeconômico, com carteiras ajustadas ao seu perfil de risco.</p>
+  <form class="busca-hero" method="get" action="{% url 'core:buscar_ativo' %}">
+    <input type="text" name="q" placeholder="Pesquise por ticker ou nome da empresa" autocomplete="off" required>
+    <button type="submit" class="btn">Buscar</button>
+  </form>
+</section>
 
-  /* CARTEIRAS CORINGA */
-  .coringa-card { background: #fff; border-radius: 14px; padding: 18px 20px;
-                  box-shadow: 0 1px 3px rgba(0,0,0,.06); position: relative;
-                  overflow: hidden; border-top: 3px solid var(--cor); }
-  .coringa-header { display: flex; align-items: center; gap: 8px; margin-bottom: 14px; }
-  .coringa-icone { font-size: 20px; }
-  .coringa-titulo { font-size: 14px; font-weight: 700; }
-  .coringa-sub { font-size: 11px; color: #888; }
-  .coringa-ativo { display: flex; align-items: center; gap: 8px; padding: 7px 0;
-                   border-bottom: 1px solid #f3f3f3; }
-  .coringa-ativo:last-child { border-bottom: none; }
-  .coringa-ticker { font-weight: 600; font-size: 13px; width: 56px; }
-  .coringa-bar-wrap { flex: 1; }
-  .coringa-bar-bg { height: 6px; background: #f0f0f0; border-radius: 3px; }
-  .coringa-bar-fill { height: 6px; border-radius: 3px; background: var(--cor); }
-  .coringa-pct { font-size: 12px; font-weight: 600; width: 38px; text-align: right; }
-  .coringa-mais { text-align: center; font-size: 11px; color: #aaa; margin-top: 8px;
-                  padding: 6px; background: #fafafa; border-radius: 8px; }
-  .coringa-cta { display: block; text-align: center; margin-top: 12px; padding: 8px;
-                 background: var(--cor); color: #fff; border-radius: 8px;
-                 text-decoration: none; font-size: 12px; font-weight: 600; }
-
-  .noticia-row { display: flex; align-items: flex-start; gap: 9px; padding: 9px 0;
-                 border-bottom: 1px solid #f3f3f3; }
-  .noticia-row:last-child { border-bottom: none; }
-  .badge { font-size: 10px; font-weight: 600; padding: 2px 8px; border-radius: 20px;
-           flex-shrink: 0; margin-top: 2px; }
-  .badge-positivo { background: #E1F5EE; color: #0F6E56; }
-  .badge-negativo { background: #FAECE7; color: #993C1D; }
-  .badge-neutro   { background: #FAEEDA; color: #854F0B; }
-  .noticia-texto { font-size: 13px; line-height: 1.4; }
-
-  table.macro-table { width: 100%; font-size: 13px; }
-  table.macro-table td { padding: 6px 0; }
-  table.macro-table td:last-child { text-align: right; font-weight: 600; }
-
-  .cta-banner { background: #534AB7; color: #fff; border-radius: 12px;
-                padding: 20px 24px; text-align: center; margin-top: 24px; }
-  .cta-banner a { background: #fff; color: #534AB7; padding: 8px 18px;
-                  border-radius: 8px; text-decoration: none; font-size: 13px;
-                  font-weight: 600; display: inline-block; margin-top: 10px; }
-</style>
-</head>
-<body>
-
-<nav class="nav">
-  <span class="logo">📈 Insight Invest</span>
-  <a href="{% url 'users:login' %}" class="login-btn">Entrar</a>
-</nav>
-
-<div class="hero">
-  <h1>Análise quantitativa de ações com dados fundamentalistas, macro e sentimento</h1>
-<form class="search-box" method="GET" action="{% url 'core:buscar_ativo' %}">
-  <input
-    type="text"
-    name="q"
-    placeholder="Pesquise por ticker"
-    autocomplete="off"
-    required
-  />
+{% if macro or score_macro %}
+<div class="faixa">
+  {% if macro %}<span>Selic <b>{{ macro.selic|floatformat:2 }}% a.a.</b></span>{% endif %}
+  {% if score_macro %}<span>Escore macro <b class="{% if score_macro < 40 %}down{% else %}up{% endif %}">{{ score_macro|floatformat:0 }}/100</b></span>{% endif %}
 </div>
-  <button type="submit">Buscar</button>
-</form>
+{% endif %}
 
-<div class="ticker-tape">
-  {% if macro %}
-  <span>Selic <b>{{ macro.selic }}%</b></span>
-  {% endif %}
-  {% if score_macro %}
-  <span>Score macro <b class="{% if score_macro < 40 %}down{% else %}up{% endif %}">{{ score_macro|floatformat:0 }}/100</b></span>
-  {% endif %}
+<div class="secao">📊 Rankings de ativos</div>
+<div class="grade g4">
+  <div class="card">
+    <div class="titulo-card">Maior escore</div>
+    {% for r in ranking_score %}
+    <a class="rank" href="{% url 'core:ativo' r.ticker %}">
+      <span class="rank-pos">{{ r.posicao }}</span><span class="rank-ticker">{{ r.ticker }}</span>
+      <span class="rank-setor">{{ r.setor }}</span><span class="rank-valor">{{ r.valor|floatformat:0 }}</span>
+    </a>
+    {% empty %}<p class="vazio">Sem dados.</p>{% endfor %}
+  </div>
+  <div class="card">
+    <div class="titulo-card">Maior dividend yield</div>
+    {% for r in ranking_dy %}
+    <a class="rank" href="{% url 'core:ativo' r.ticker %}">
+      <span class="rank-pos">{{ r.posicao }}</span><span class="rank-ticker">{{ r.ticker }}</span>
+      <span class="rank-setor">{{ r.setor }}</span><span class="rank-valor">{{ r.valor }}%</span>
+    </a>
+    {% empty %}<p class="vazio">Sem dados.</p>{% endfor %}
+  </div>
+  <div class="card">
+    <div class="titulo-card">Maior liquidez corrente</div>
+    {% for r in ranking_liquidez %}
+    <a class="rank" href="{% url 'core:ativo' r.ticker %}">
+      <span class="rank-pos">{{ r.posicao }}</span><span class="rank-ticker">{{ r.ticker }}</span>
+      <span class="rank-setor">{{ r.setor }}</span><span class="rank-valor azul">{{ r.valor }}x</span>
+    </a>
+    {% empty %}<p class="vazio">Sem dados.</p>{% endfor %}
+  </div>
+  <div class="card">
+    <div class="titulo-card">Menor endividamento</div>
+    {% for r in ranking_divida %}
+    <a class="rank" href="{% url 'core:ativo' r.ticker %}">
+      <span class="rank-pos">{{ r.posicao }}</span><span class="rank-ticker">{{ r.ticker }}</span>
+      <span class="rank-setor">{{ r.setor }}</span><span class="rank-valor laranja">{{ r.valor }}x</span>
+    </a>
+    {% empty %}<p class="vazio">Sem dados.</p>{% endfor %}
+  </div>
 </div>
 
-<div class="container">
-
-  <div class="section-title">📊 Rankings de Ativos</div>
-  <div class="grid-4">
-    <div class="card">
-      <div class="card-title">Maior Score</div>
-      {% for r in ranking_score %}
-      <div class="rank-row">
-        <span class="rank-pos">{{ r.posicao }}</span>
-        <span class="rank-ticker">{{ r.ticker }}</span>
-        <span class="rank-valor">{{ r.valor|floatformat:0 }}</span>
+<div class="secao">💼 Carteiras de referência por perfil</div>
+<div class="grade g3">
+  {% for c in carteiras_coringa %}
+  <div class="perfil-card" style="--cor:{{ c.cor }}">
+    <div class="perfil-topo">
+      <span class="perfil-icone">{{ c.icone }}</span>
+      <div>
+        <div class="perfil-titulo">{{ c.titulo }}</div>
+        <div class="perfil-sub">Carteira teórica de exemplo{% if c.data_calculo %} · {{ c.data_calculo|slice:"8:10" }}/{{ c.data_calculo|slice:"5:7" }}/{{ c.data_calculo|slice:":4" }}{% endif %}</div>
       </div>
-      {% empty %}<p style="color:#999;font-size:12px">Sem dados.</p>{% endfor %}
     </div>
 
-    <div class="card">
-      <div class="card-title">Maior Dividend Yield</div>
-      {% for r in ranking_dy %}
-      <div class="rank-row">
-        <span class="rank-pos">{{ r.posicao }}</span>
-        <span class="rank-ticker">{{ r.ticker }}</span>
-        <span class="rank-valor">{{ r.valor }}%</span>
+    {% if c.sem_dados %}
+      <p class="vazio">Dados ainda sendo calculados.</p>
+    {% else %}
+      {% if c.metricas.pct_renda_fixa is not None %}
+      <div class="divisao">
+        <div class="rf" style="width:{{ c.metricas.pct_renda_fixa|floatformat:0 }}%"></div>
+        <div class="ac" style="width:{{ c.metricas.pct_acoes|floatformat:0 }}%"></div>
       </div>
-      {% empty %}<p style="color:#999;font-size:12px">Sem dados.</p>{% endfor %}
-    </div>
-
-    <div class="card">
-      <div class="card-title">Maior Liquidez Corrente</div>
-      {% for r in ranking_liquidez %}
-      <div class="rank-row">
-        <span class="rank-pos">{{ r.posicao }}</span>
-        <span class="rank-ticker">{{ r.ticker }}</span>
-        <span class="rank-valor azul">{{ r.valor }}x</span>
-      </div>
-      {% empty %}<p style="color:#999;font-size:12px">Sem dados.</p>{% endfor %}
-    </div>
-
-    <div class="card">
-      <div class="card-title">Menor Endividamento</div>
-      {% for r in ranking_divida %}
-      <div class="rank-row">
-        <span class="rank-pos">{{ r.posicao }}</span>
-        <span class="rank-ticker">{{ r.ticker }}</span>
-        <span class="rank-valor laranja">{{ r.valor }}x</span>
-      </div>
-      {% empty %}<p style="color:#999;font-size:12px">Sem dados.</p>{% endfor %}
-    </div>
-    </div>
-  <div class="section-title">💼 Carteiras Ideais por Perfil — veja um gostinho</div>
-  <div class="grid-3">
-    {% for c in carteiras_coringa %}
-    <div class="coringa-card" style="--cor:{{ c.cor }}">
-      <div class="coringa-header">
-        <span class="coringa-icone">{{ c.icone }}</span>
-        <div>
-          <div class="coringa-titulo">{{ c.perfil|title }}</div>
-          <div class="coringa-sub">Carteira ideal de exemplo</div>
-        </div>
-      </div>
-
-      {% if c.sem_dados %}
-        <p style="color:#999;font-size:12px">Dados ainda sendo calculados.</p>
-      {% else %}
-        {% for a in c.ativos %}
-        <div class="coringa-ativo">
-          <span class="coringa-ticker">{{ a.ticker }}</span>
-          <div class="coringa-bar-wrap">
-            <div class="coringa-bar-bg"><div class="coringa-bar-fill" style="width:{{ a.pct }}%"></div></div>
-          </div>
-          <span class="coringa-pct">{{ a.pct }}%</span>
-        </div>
-        {% endfor %}
-        {% if c.qtd_total > 4 %}
-        <div class="coringa-mais">🔒 +{{ c.qtd_total|add:"-4" }} ativos disponíveis após o cadastro.</div>
-        {% endif %}
+      <div class="divisao-leg"><span>Renda fixa {{ c.metricas.pct_renda_fixa|floatformat:0 }}%</span><span>Ações {{ c.metricas.pct_acoes|floatformat:0 }}%</span></div>
       {% endif %}
-
-      <a href="{% url 'users:login' %}?perfil_sugerido={{ c.perfil }}" class="coringa-cta">Personalizar minha carteira →</a>
-    </div>
-    {% endfor %}
-  </div>
-
-  <div class="grid-2" style="margin-top:24px">
-    <div class="card">
-      <div class="card-title">📰 Notícias e sentimento de mercado</div>
-      {% for n in noticias %}
-      <div class="noticia-row">
-        <span class="badge badge-{{ n.sentimento_label }}">{{ n.sentimento_label }}</span>
-        <span class="noticia-texto">{{ n.texto|truncatechars:110 }}</span>
+      {% for a in c.ativos %}
+      <div class="item">
+        <span class="item-ticker">{% if a.tipo == "renda_fixa" %}{{ a.ticker }}{% else %}<a href="{% url 'core:ativo' a.ticker %}">{{ a.ticker }}</a>{% endif %}</span>
+        <div class="barra"><div class="{% if a.tipo == 'renda_fixa' %}rf{% endif %}" style="width:{{ a.pct|floatformat:0 }}%"></div></div>
+        <span class="item-pct">{{ a.pct|floatformat:1 }}%</span>
       </div>
-      {% empty %}<p style="color:#999;font-size:13px">Nenhuma notícia coletada ainda.</p>{% endfor %}
-    </div>
+      {% endfor %}
+      {% if c.qtd_total > 4 %}
+      <div class="mais">🔒 +{{ c.qtd_total|add:"-4" }} itens disponíveis após o cadastro.</div>
+      {% endif %}
+    {% endif %}
 
-    <div class="card">
-      <div class="card-title">🏦 Radar macroeconômico</div>
-      {% if macro %}
-      <table class="macro-table">
-        <tr><td>Selic</td><td>{{ macro.selic }}% a.a.</td></tr>
-      </table>
-      {% else %}<p style="color:#999;font-size:13px">Dados macro ainda não carregados.</p>{% endif %}
+    <div class="perfil-cta-wrap">
+      <a href="{% if user.is_authenticated %}{% url 'scoring:carteira' %}{% else %}{% url 'users:registro' %}?perfil_sugerido={{ c.perfil }}{% endif %}" class="perfil-cta">Personalizar minha carteira →</a>
     </div>
   </div>
-
-  <div class="cta-banner">
-    <div style="font-size:15px;font-weight:600">Quer a carteira completa para o seu perfil?</div>
-    <div style="font-size:13px;opacity:.85;margin-top:4px">Cadastre-se grátis e responda o quiz </div>
-    <a href="{% url 'users:login' %}">Criar conta gratuita</a>
-    <p>Ainda não tem conta? <a href="{% url 'users:registro' %}">Cadastre-se e descubra seu perfil</a></p>
-  </div>
-
+  {% endfor %}
 </div>
-</body>
-</html>
+
+<div class="grade g2" style="margin-top:24px">
+  <div class="card">
+    <div class="titulo-card">📰 Notícias e sentimento de mercado</div>
+    {% for n in noticias %}
+    <div class="noticia">
+      <span class="badge badge-{{ n.sentimento_label }}">{{ n.sentimento_label }}</span>
+      <span class="noticia-texto">{{ n.texto|truncatechars:110 }}</span>
+    </div>
+    {% empty %}<p class="vazio">Nenhuma notícia coletada ainda.</p>{% endfor %}
+  </div>
+  <div class="card">
+    <div class="titulo-card">🏦 Radar macroeconômico</div>
+    {% if macro %}
+    <table class="macro-tab">
+      <tr><td>Selic</td><td>{{ macro.selic|floatformat:2 }}% a.a.</td></tr>
+      {% if score_macro %}<tr><td>Escore macro</td><td>{{ score_macro|floatformat:0 }}/100</td></tr>{% endif %}
+    </table>
+    {% else %}<p class="vazio">Dados macro ainda não carregados.</p>{% endif %}
+  </div>
+</div>
+
+{% if not user.is_authenticated %}
+<div class="cta">
+  <div style="font-size:16px;font-weight:600">Quer a carteira completa para o seu perfil?</div>
+  <div style="font-size:13px;opacity:.85;margin-top:4px">Cadastre-se grátis e responda o questionário de perfil.</div>
+  <a class="btn" href="{% url 'users:registro' %}">Criar conta gratuita</a>
+  <p>Já tem conta? <a href="{% url 'users:login' %}">Entrar</a> · <a href="{% url 'users:perfis' %}">Conheça os perfis</a></p>
+</div>
+{% endif %}
+{% endblock %}

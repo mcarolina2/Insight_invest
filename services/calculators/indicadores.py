@@ -53,9 +53,24 @@ def divida_liquida(emp_cp: float, emp_lp: float, caixa: float) -> float:
     return divida_bruta(emp_cp, emp_lp) - (caixa or 0)
 
 
+# Valor-teto para Dívida Líquida/EBITDA quando a empresa tem dívida líquida mas
+# EBITDA negativo ou nulo: não há geração de caixa para pagar a dívida, a pior
+# situação possível. O teto a coloca entre os piores no ranking de endividamento.
+DIVIDA_EBITDA_SEM_GERACAO_DE_CAIXA = 99.0
+
+
 def divida_sobre_ebitda(div_liq: float, ebitda: float) -> float | None:
-    """Dívida Líquida / EBITDA — indicador central de alavancagem."""
-    return round(div_liq / ebitda, 4) if ebitda and ebitda != 0 else None
+    """
+    Dívida Líquida / EBITDA — indicador central de alavancagem.
+    - EBITDA > 0: razão usual.
+    - EBITDA <= 0 e dívida líquida > 0: valor-teto (pior caso).
+    - EBITDA <= 0 e caixa líquido (dívida líquida <= 0): sem interpretação -> None.
+    """
+    if ebitda is None:
+        return None
+    if ebitda > 0:
+        return round(div_liq / ebitda, 4)
+    return DIVIDA_EBITDA_SEM_GERACAO_DE_CAIXA if (div_liq or 0) > 0 else None
 
 
 def divida_sobre_pl(div_bruta: float, pl: float) -> float | None:
@@ -81,8 +96,12 @@ def calcular_ebitda(resultado_operacional: float, depreciacao: float = 0) -> flo
 # ---------------------------------------------------------------------------
 
 def roe(lucro_liquido: float, pl: float) -> float | None:
-    """Return on Equity — retorno sobre o patrimônio dos acionistas."""
-    return round(lucro_liquido / pl, 4) if pl and pl != 0 else None
+    """
+    Return on Equity — retorno sobre o patrimônio dos acionistas.
+    Com patrimônio líquido negativo ou nulo o ROE perde o sentido (prejuízo
+    sobre PL negativo daria ROE positivo), por isso retorna None.
+    """
+    return round(lucro_liquido / pl, 4) if pl and pl > 0 else None
 
 
 def roa(lucro_liquido: float, ativo_total: float) -> float | None:
@@ -107,10 +126,14 @@ def margem_liquida(lucro_liquido: float, receita: float) -> float | None:
 # ---------------------------------------------------------------------------
 
 def crescimento_yoy(valor_atual: float, valor_anterior: float) -> float | None:
-    """Variação Year-over-Year (crescimento anual)."""
-    if not valor_anterior or valor_anterior == 0:
+    """
+    Variação Year-over-Year (crescimento anual).
+    Só é calculada quando o valor anterior é positivo: a partir de prejuízo
+    (base negativa) ou de base zero a variação percentual não tem interpretação.
+    """
+    if valor_anterior is None or valor_anterior <= 0:
         return None
-    return round((valor_atual - valor_anterior) / abs(valor_anterior), 4)
+    return round((valor_atual - valor_anterior) / valor_anterior, 4)
 
 
 def cagr(valor_inicial: float, valor_final: float, anos: int) -> float | None:

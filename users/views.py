@@ -1,14 +1,22 @@
-from django.contrib.auth import authenticate, login, logout
-from django.contrib.auth.decorators import login_required
-from django.shortcuts import redirect, render
 from functools import wraps
+
 from django.contrib import messages
-from django.contrib.auth import login
+from django.contrib.auth import authenticate, login, logout
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.forms import UserCreationForm
 from django.shortcuts import redirect, render
-from .models import PerfilRisco, perfil_do_usuario
-from .suitability import PERGUNTAS, classificar
+
+from .models import PerfilRisco, RespostaQuiz, perfil_do_usuario
+from .suitability import DIMENSOES, PERGUNTAS, classificar
+
+PERFIS_VALIDOS = ("conservador", "intermediario", "arrojado")
+
+
+class RegistroForm(UserCreationForm):
+    class Meta(UserCreationForm.Meta):
+        from .models import User
+        model = User
+        fields = ("username",)
 
 
 def perfil_obrigatorio(view):
@@ -23,146 +31,139 @@ def perfil_obrigatorio(view):
     return _wrapped
 
 
+def _depois_do_login(user):
+    return redirect("users:quiz") if perfil_do_usuario(user) is None else redirect("scoring:carteira")
+
+
+def _guardar_perfil_sugerido(request):
+    """A home envia ?perfil_sugerido=... ao clicar em 'Personalizar minha carteira'."""
+    sugerido = request.GET.get("perfil_sugerido")
+    if sugerido in PERFIS_VALIDOS:
+        request.session["perfil_sugerido"] = sugerido
+
+
 def registro(request):
-    form = UserCreationForm(request.POST or None)
-    if form.is_valid():
+    _guardar_perfil_sugerido(request)
+    if request.user.is_authenticated:
+        return _depois_do_login(request.user)
+    form = RegistroForm(request.POST or None)
+    if request.method == "POST" and form.is_valid():
         login(request, form.save())
         return redirect("users:quiz")
-    return render(request, "users/registro.html", {"form": form})
-
-
-@login_required
-def quiz(request):
-    if request.method == "POST":
-        try:
-            r = classificar({p["id"]: request.POST.get(p["id"]) for p in PERGUNTAS})
-        except ValueError as e:
-            return render(request, "users/quiz.html",
-                          {"perguntas": PERGUNTAS, "erro": str(e),
-                           "marcadas": request.POST})
-        PerfilRisco.objects.update_or_create(
-            user=request.user,
-            defaults={"tipo": r["perfil"], "pontuacao": r["pontos"],
-                      "respostas": r["respostas"]},
-        )
-        return render(request, "users/resultado.html", {"resultado": r})
-    return render(request, "users/quiz.html", {"perguntas": PERGUNTAS})
-
-
-def _precisa_quiz(user):
-    return user.perfil_risco is None
-
-
-def _redirecionar_pos_login(user, request=None):
-    if _precisa_quiz(user):
-        return redirect('users:quiz')
-    return redirect('carteira')
+    return render(request, "users/registro.html", {
+        "form": form, "perfil_sugerido": request.session.get("perfil_sugerido")})
 
 
 def login_view(request):
+    _guardar_perfil_sugerido(request)
     if request.user.is_authenticated:
-        return _redirecionar_pos_login(request.user, request)
-
-    # Guarda o perfil sugerido vindo da carteira coringa (?perfil_sugerido=...)
-    perfil_sugerido = request.GET.get('perfil_sugerido')
-    if perfil_sugerido in ('conservador', 'intermediario', 'arrojado'):
-        request.session['perfil_sugerido'] = perfil_sugerido
+        return _depois_do_login(request.user)
 
     erro = None
-    if request.method == 'POST':
-        username = request.POST.get('username', '').strip()
-        password = request.POST.get('password', '')
-        user = authenticate(request, username=username, password=password)
+    if request.method == "POST":
+        user = authenticate(request,
+                            username=request.POST.get("username", "").strip(),
+                            password=request.POST.get("password", ""))
         if user:
             login(request, user)
-            return _redirecionar_pos_login(user, request)
-        erro = 'Usuário ou senha incorretos.'
+            return _depois_do_login(user)
+        erro = "Usuário ou senha incorretos."
 
-    return render(request, 'users/login.html', {
-        'erro': erro,
-        'perfil_sugerido': request.session.get('perfil_sugerido'),
+    return render(request, "users/login.html", {
+        "erro": erro,
+        "perfil_sugerido": request.session.get("perfil_sugerido"),
     })
 
 
 def logout_view(request):
     logout(request)
-    return redirect('users:login')
+    return redirect("users:login")
 
 
-@login_required
-def quiz_view(request):
-    if not _precisa_quiz(request.user):
-        return redirect('carteira')
+def _perguntas_com_dimensao():
+    return [{**p, "nome_dimensao": DIMENSOES[p["dimensao"]]} for p in PERGUNTAS]
 
-    from .models import Pergunta
-    perguntas = Pergunta.objects.filter(ativa=True).prefetch_related('opcoes')
 
-    return render(request, 'users/quiz.html', {
-        'perguntas': perguntas,
-        'perfil_sugerido': request.session.get('perfil_sugerido'),
+def _regras_dos_perfis():
+    """Configuração em uso de cada perfil, formatada para exibição."""
+    from scoring.services.motor_scoring_v2 import obter_perfis
+    nomes = dict(PerfilRisco.TIPOS)
+    saida = []
+    for chave, cfg in obter_perfis().items():
+        pesos = cfg["pesos"]
+        total = sum(pesos.values()) or 1
+        dims = cfg["micro_pesos"]
+        filtros = []
+        f = cfg.get("filtros_kpi", {})
+        if "liquidez_corrente__gte" in f:
+            filtros.append(f"liquidez corrente ≥ {f['liquidez_corrente__gte']:g}")
+        if "divida_ebitda__lte" in f:
+            filtros.append(f"dívida líquida/EBITDA ≤ {f['divida_ebitda__lte']:g}")
+        if "roe__gte" in f:
+            filtros.append(f"ROE ≥ {f['roe__gte'] * 100:g}%")
+        saida.append({
+            "chave": chave, "nome": nomes.get(chave, chave.title()),
+            "descricao": cfg.get("descricao", ""),
+            "qtd_ativos": cfg["qtd_ativos"], "max_pct": round(cfg["max_pct_ativo"] * 100),
+            "score_min": cfg["score_min"], "filtros": filtros,
+            "camadas": [("Fundamentalista", round(pesos["micro"] / total * 100)),
+                        ("Macroeconômica", round(pesos["macro"] / total * 100)),
+                        ("Estatística", round(pesos["estat"] / total * 100))],
+            "dimensoes": [("Liquidez", round(dims["liquidez"] * 100)),
+                          ("Rentabilidade", round(dims["rentabilidade"] * 100)),
+                          ("Endividamento", round(dims["divida"] * 100)),
+                          ("Crescimento", round(dims["crescimento"] * 100))],
+        })
+    return saida
+
+
+def perfis_view(request):
+    """Página pública que explica os três perfis com as regras em uso."""
+    return render(request, "users/perfis.html", {
+        "perfis": _regras_dos_perfis(),
+        "meu_perfil": perfil_do_usuario(request.user),
     })
 
 
 @login_required
-def processar_quiz(request):
-    if request.method != 'POST':
-        return redirect('users:quiz')
-
-    from .models import Pergunta, OpcaoResposta, RespostaUsuario, PerfilRisco
-    user      = request.user
-    perguntas = Pergunta.objects.filter(ativa=True).prefetch_related('opcoes')
-
-    RespostaUsuario.objects.filter(user=user).delete()
-
-    score_total = 0
-    batch = []
-    for pergunta in perguntas:
-        opcao_id = request.POST.get(f'pergunta_{pergunta.id}')
-        if not opcao_id:
-            continue
+def quiz(request):
+    """Questionário de suitability (users/suitability.py). Pode ser refeito a qualquer momento."""
+    if request.method == "POST":
         try:
-            opcao = OpcaoResposta.objects.get(id=opcao_id, pergunta=pergunta)
-        except OpcaoResposta.DoesNotExist:
-            continue
-        pontos = opcao.valor_score * pergunta.peso
-        score_total += pontos
-        batch.append(RespostaUsuario(user=user, pergunta=pergunta, opcao=opcao, score=pontos))
+            r = classificar({p["id"]: request.POST.get(p["id"]) for p in PERGUNTAS})
+        except ValueError as e:
+            return render(request, "users/quiz.html", {
+                "perguntas": _perguntas_com_dimensao(), "erro": str(e), "marcadas": request.POST})
+        sugerido = request.session.pop("perfil_sugerido", None) or ""
+        PerfilRisco.objects.update_or_create(
+            user=request.user,
+            defaults={"tipo": r["perfil"], "pontuacao": r["pontos"], "respostas": r["respostas"]},
+        )
+        RespostaQuiz.objects.create(
+            user=request.user, perfil=r["perfil"], pontuacao=r["pontos"], respostas=r["respostas"],
+            por_dimensao=r["por_dimensao"], vetos=r["vetos"], perfil_sugerido_home=sugerido)
+        regras = next((p for p in _regras_dos_perfis() if p["chave"] == r["perfil"]), None)
+        return render(request, "users/resultado_quiz.html", {
+            "resultado": r, "regras": regras,
+            "perfil_sugerido": sugerido,
+            "bateu_sugestao": sugerido == r["perfil"] if sugerido else None,
+        })
 
-    RespostaUsuario.objects.bulk_create(batch)
-
-    perfil = PerfilRisco.objects.filter(
-        score_min__lte=score_total, score_max__gte=score_total
-    ).first()
-    if not perfil:
-        perfil = PerfilRisco.objects.filter(tipo='intermediario').first()
-
-    user.perfil_risco = perfil
-    user.save(update_fields=['perfil_risco'])
-
-    # Verifica se bateu com o perfil sugerido na carteira coringa
-    perfil_sugerido = request.session.pop('perfil_sugerido', None)
-    request.session['perfil_bateu_sugestao'] = (perfil_sugerido == perfil.tipo)
-
-    return redirect('users:resultado_quiz')
-
-
-@login_required
-def resultado_quiz(request):
-    if not request.user.perfil_risco:
-        return redirect('users:quiz')
-
-    return render(request, 'users/resultado_quiz.html', {
-        'perfil':  request.user.perfil_risco,
-        'usuario': request.user,
-        'bateu_sugestao': request.session.pop('perfil_bateu_sugestao', False),
-    })
+    anteriores = {}
+    obj = PerfilRisco.objects.filter(user=request.user).first()
+    if obj:
+        anteriores = {k: str(v) for k, v in obj.respostas.items()}
+    return render(request, "users/quiz.html", {
+        "perguntas": _perguntas_com_dimensao(), "marcadas": anteriores, "refazendo": bool(obj)})
 
 
-@login_required
+@perfil_obrigatorio
 def perfil_view(request):
-    if _precisa_quiz(request.user):
-        return redirect('users:quiz')
-    return render(request, 'users/perfil.html', {
-        'usuario': request.user,
-        'perfil':  request.user.perfil_risco,
-    })
+    obj = PerfilRisco.objects.get(user=request.user)
+    respostas = [
+        {"pergunta": p["texto"], "resposta": p["opcoes"][obj.respostas[p["id"]]]}
+        for p in PERGUNTAS if p["id"] in obj.respostas
+    ]
+    historico = RespostaQuiz.objects.filter(user=request.user)[:10]
+    return render(request, "users/perfil.html", {"perfil": obj, "respostas": respostas,
+                                                 "historico": historico})

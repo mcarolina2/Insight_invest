@@ -35,7 +35,10 @@ def solicitar_upgrade(request):
     if request.method == 'POST':
         from .models import Assinatura
  
-        assinatura = request.user.assinatura
+        assinatura = getattr(request.user, 'assinatura', None)
+        if assinatura is None:
+            messages.error(request, "Sua conta não tem assinatura. Fale com o administrador.")
+            return redirect('billing:upgrade')
         assinatura.status = 'pendente'
         assinatura.save(update_fields=['status'])
  

@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% block titulo %}Perfis de investidor — Insight Invest{% endblock %}
+{% block largura %}1040px{% endblock %}
+{% block estilo %}
+  .grade{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+  @media(max-width:860px){.grade{grid-template-columns:1fr}}
+  .perfil{border-top:3px solid var(--cor)}
+  .perfil.meu{box-shadow:0 0 0 1px var(--cor)}
+  .perfil h2{margin:0 0 6px;font-size:18px;color:var(--cor)}
+  .perfil h3{font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin:16px 0 8px}
+  .linha{display:flex;justify-content:space-between;font-size:13px;margin:0 0 6px}
+  .barra{height:6px;background:var(--surface2);border-radius:6px;overflow:hidden;margin:0 0 10px}
+  .barra div{height:100%;background:var(--cor)}
+  .tag{font-size:11px;padding:2px 8px;border-radius:12px;background:var(--surface2);color:var(--muted)}
+{% endblock %}
+{% block conteudo %}
+<h1>Perfis de investidor</h1>
+<p class="muted">O questionário classifica cada investidor em um dos três perfis abaixo. As regras mostradas são as que o sistema está usando agora.</p>
+<div class="grade">
+{% for p in perfis %}
+  <div class="card perfil {% if p.chave == meu_perfil %}meu{% endif %}"
+       style="--cor:{% if p.chave == 'conservador' %}#22c55e{% elif p.chave == 'intermediario' %}#8b85ff{% else %}#f59e0b{% endif %}">
+    <h2>{{ p.nome }} {% if p.chave == meu_perfil %}<span class="tag">seu perfil</span>{% endif %}</h2>
+    <p class="muted">{{ p.descricao }}</p>
+
+    <h3>Peso de cada análise</h3>
+    {% for nome, peso in p.camadas %}
+      <div class="linha"><span>{{ nome }}</span><b>{{ peso }}%</b></div>
+      <div class="barra"><div style="width:{{ peso }}%"></div></div>
+    {% endfor %}
+
+    <h3>Dentro da análise fundamentalista</h3>
+    {% for nome, peso in p.dimensoes %}
+      <div class="linha"><span>{{ nome }}</span><b>{{ peso }}%</b></div>
+    {% endfor %}
+
+    <h3>Regras da carteira</h3>
+    <div class="linha"><span>Ativos</span><b>até {{ p.qtd_ativos }}</b></div>
+    <div class="linha"><span>Peso máximo por ativo</span><b>{{ p.max_pct }}%</b></div>
+    <div class="linha"><span>Escore mínimo</span><b>{{ p.score_min|floatformat:0 }}</b></div>
+    <div class="linha"><span>Filtros</span><b style="text-align:right">{{ p.filtros|join:"; "|default:"nenhum" }}</b></div>
+  </div>
+{% endfor %}
+</div>
+<p style="margin-top:20px">
+  {% if user.is_authenticated %}
+    <a class="btn" href="{% url 'users:quiz' %}">{% if meu_perfil %}Refazer questionário{% else %}Descobrir meu perfil{% endif %}</a>
+  {% else %}
+    <a class="btn" href="{% url 'users:registro' %}">Criar conta e descobrir meu perfil</a>
+  {% endif %}
+</p>
+{% endblock %}

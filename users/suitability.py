@@ -29,6 +29,11 @@ PERGUNTAS = [
 ]
 
 PONTUACAO_MAXIMA = 3 * len(PERGUNTAS)          # 21
+DIMENSOES = {
+    "objetivos":    "Objetivos e horizonte",
+    "perdas":       "Tolerância a perdas e necessidade de recursos",
+    "conhecimento": "Conhecimento e experiência",
+}
 FAIXAS = [(8, "conservador"), (15, "intermediario"), (21, "arrojado")]
 
 
@@ -61,4 +66,11 @@ def classificar(respostas: dict) -> dict:
     if vetos:
         perfil = "conservador"
 
-    return {"pontos": pontos, "perfil": perfil, "vetos": vetos, "respostas": r}
+    por_dimensao = []
+    for chave, nome in DIMENSOES.items():
+        ids = [p["id"] for p in PERGUNTAS if p["dimensao"] == chave]
+        por_dimensao.append({"dimensao": chave, "nome": nome,
+                             "pontos": sum(r[i] for i in ids), "maximo": 3 * len(ids)})
+
+    return {"pontos": pontos, "perfil": perfil, "vetos": vetos, "respostas": r,
+            "por_dimensao": por_dimensao, "maximo": PONTUACAO_MAXIMA}

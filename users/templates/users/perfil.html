@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block titulo %}Meu perfil — Insight Invest{% if historico|length > 1 %}
+<div class="card">
+  <h1 style="font-size:16px">Histórico do questionário</h1>
+  {% for h in historico %}
+    <p style="margin:0 0 6px;font-size:14px">{{ h.criado_em|date:"d/m/Y H:i" }} — <b>{{ h.get_perfil_display }}</b> ({{ h.pontuacao }} pontos)</p>
+  {% endfor %}
+</div>
+{% endif %}
+{% endblock %}
+{% block conteudo %}
+<div class="card">
+  <h1>{{ user.username }}</h1>
+  <p>Perfil de risco: <b>{{ perfil.get_tipo_display }}</b> ({{ perfil.pontuacao }} de 21 pontos)</p>
+  <p class="muted">Atualizado em {{ perfil.atualizado_em|date:"d/m/Y H:i" }}</p>
+  {% if user.assinatura %}<p>Plano: <b>{{ user.assinatura.plano }}</b></p>{% endif %}
+  <a class="btn" href="{% url 'scoring:carteira' %}">Minha carteira</a>
+  <a class="btn secundario" href="{% url 'users:quiz' %}">Refazer questionário</a>
+</div>
+{% if respostas %}
+<div class="card">
+  <h1 style="font-size:16px">Suas respostas</h1>
+  {% for r in respostas %}
+    <p style="margin:0 0 10px"><span class="muted">{{ r.pergunta }}</span><br>{{ r.resposta }}</p>
+  {% endfor %}
+</div>
+{% endif %}
+{% if historico|length > 1 %}
+<div class="card">
+  <h1 style="font-size:16px">Histórico do questionário</h1>
+  {% for h in historico %}
+    <p style="margin:0 0 6px;font-size:14px">{{ h.criado_em|date:"d/m/Y H:i" }} — <b>{{ h.get_perfil_display }}</b> ({{ h.pontuacao }} pontos)</p>
+  {% endfor %}
+</div>
+{% endif %}
+{% endblock %}
