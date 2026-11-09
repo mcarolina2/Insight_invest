@@ -538,3 +538,21 @@ class UmTickerPorEmpresaTests(TestCase):
             cache.clear()
             res = montar_carteira_otimizada(df, "intermediario", modelo="score", calcular_fronteira=False)
         self.assertEqual(len({topo, irmao.ticker} & set(res["alocacao"])), 1)
+
+
+class MacroConsolidadoTests(TestCase):
+    def test_cada_indicador_usa_seu_ultimo_valor(self):
+        from datetime import date
+        from scoring.services.macro import macro_consolidado
+        from scoring.services.motor_scoring_v2 import calcular_score_macro
+        for m in range(1, 13):
+            KpiMacro.objects.create(data_ref=date(2026, m, 1), ipca_mensal=0.5, pib_trimestral=0.8 if m % 3 == 0 else None,
+                                    desemprego=6.0, exportacoes=30000, importacoes=25000)
+        KpiMacro.objects.create(data_ref=date(2026, 12, 20), selic=14.5)       # linha diária: só Selic
+        m = macro_consolidado()
+        self.assertEqual(m.data_ref, date(2026, 12, 20))
+        self.assertEqual((m.selic, m.ipca_mensal, m.desemprego), (14.5, 0.5, 6.0))
+        self.assertEqual(m.balanca_comercial, 5000)
+        self.assertAlmostEqual(m.ipca_12m, 6.17, places=2)
+        so_ultima = KpiMacro.objects.order_by("-data_ref").first()
+        self.assertNotEqual(calcular_score_macro(m), calcular_score_macro(so_ultima))

@@ -1,0 +1,2 @@
+ticker,empresa,data_ref,indicador,valor,exibicao,faixa_plausivel
+ERRO3,Empresa com erro,2024-12-31,crescimento_receita,1200.0,"120,000.0%",-100.0% a 500.0%

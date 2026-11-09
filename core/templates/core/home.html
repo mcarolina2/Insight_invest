@@ -69,6 +69,7 @@
   .macro-tab{width:100%;font-size:13px;border-collapse:collapse}
   .macro-tab td{padding:6px 0;border-bottom:1px solid var(--surface2)}
   .macro-tab td:last-child{text-align:right;font-weight:600}
+  .macro-tab .ref{font-size:10px;color:var(--muted);margin-left:4px}
 
   .cta{background:linear-gradient(135deg,var(--accent),#4338ca);border-radius:12px;padding:22px 24px;
        text-align:center;margin-top:24px}
@@ -190,9 +191,16 @@
     <div class="titulo-card">🏦 Radar macroeconômico</div>
     {% if macro %}
     <table class="macro-tab">
-      <tr><td>Selic</td><td>{{ macro.selic|floatformat:2 }}% a.a.</td></tr>
+      {% if macro.selic is not None %}<tr><td>Selic (meta)</td><td>{{ macro.selic|floatformat:2 }}% a.a.</td></tr>{% endif %}
+      {% if macro.ipca_12m is not None %}<tr><td>IPCA 12 meses</td><td>{{ macro.ipca_12m|floatformat:2 }}%</td></tr>{% endif %}
+      {% if macro.ipca_mensal is not None %}<tr><td>IPCA no mês <span class="ref">{{ macro.datas.ipca_mensal|date:"m/Y" }}</span></td><td>{{ macro.ipca_mensal|floatformat:2 }}%</td></tr>{% endif %}
+      {% if macro.pib_trimestral is not None %}<tr><td>PIB (variação no ano) <span class="ref">{{ macro.datas.pib_trimestral|date:"Y" }}</span></td><td>{{ macro.pib_trimestral|floatformat:1 }}%</td></tr>{% endif %}
+      {% if macro.ibc_br is not None %}<tr><td>IBC-Br (atividade) <span class="ref">{{ macro.datas.ibc_br|date:"m/Y" }}</span></td><td>{{ macro.ibc_br|floatformat:1 }}</td></tr>{% endif %}
+      {% if macro.balanca_comercial is not None %}<tr><td>Balança comercial <span class="ref">{{ macro.datas.balanca_comercial|date:"m/Y" }}</span></td><td>US$ {{ macro.balanca_comercial|floatformat:0 }} mi</td></tr>{% endif %}
+      {% if macro.desemprego is not None %}<tr><td>Desemprego <span class="ref">{{ macro.datas.desemprego|date:"m/Y" }}</span></td><td>{{ macro.desemprego|floatformat:1 }}%</td></tr>{% endif %}
       {% if score_macro %}<tr><td>Escore macro</td><td>{{ score_macro|floatformat:0 }}/100</td></tr>{% endif %}
     </table>
+    {% if macro.ipca_mensal is None %}<p class="vazio" style="margin-top:8px">Só a Selic foi carregada. Rode <code>load_macro_data</code> para trazer inflação, PIB, atividade e balança comercial.</p>{% endif %}
     {% else %}<p class="vazio">Dados macro ainda não carregados.</p>{% endif %}
   </div>
 </div>

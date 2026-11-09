@@ -30,9 +30,13 @@ SERIES_BCB = {
     "ipca_mensal"      : (433,   "IPCA mensal (%)"),
     "igpm_mensal"      : (189,   "IGP-M mensal (%)"),
     "ibc_br"           : (4380,  "IBC-Br — proxy do PIB mensal (índice)"),
-    "pib_trimestral"   : (7326,  "PIB trimestral — variação % vs tri anterior"),
-    "exportacoes"      : (2383,  "Exportações FOB (US$ milhões)"),
-    "importacoes"      : (2384,  "Importações FOB (US$ milhões)"),
+    # A série 7326 é ANUAL (variação real do PIB no ano); o campo mantém o nome
+    # antigo para não exigir migração.
+    "pib_trimestral"   : (7326,  "PIB — variação real anual (%)"),
+    # 2383/2384 foram descontinuadas (a API responde 404). Substituídas pelas
+    # séries do Balanço de Pagamentos (BPM6), mensais, em US$ milhões.
+    "exportacoes"      : (22708, "Exportação de bens — Balanço de Pagamentos (US$ milhões)"),
+    "importacoes"      : (22709, "Importação de bens — Balanço de Pagamentos (US$ milhões)"),
     "desemprego"       : (24369, "Taxa de desemprego PNAD (%)"),
 }
 

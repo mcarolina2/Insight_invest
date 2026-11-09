@@ -319,7 +319,8 @@ def calcular_scores_v2(perfil: str = 'intermediario', data_ref: date | None = No
     df['score_micro'] = df['empresa'].map(dict(zip(uma_por_empresa['empresa'], s_micro.reindex(uma_por_empresa.index))))
 
     # ── 3. Escore macro (igual para todos os ativos) ───────────────
-    macro = KpiMacro.objects.filter(data_ref__lte=data_ref).order_by('-data_ref').first()
+    from scoring.services.macro import macro_consolidado
+    macro = macro_consolidado(data_ref)          # último valor de CADA indicador
     df['score_macro'] = calcular_score_macro(macro)
 
     # ── 4. Escore estatístico (neutro = 50 se não houver dado) ─────

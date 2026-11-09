@@ -49,7 +49,11 @@ def baixar_precos(tickers: list[str], anos: int = 3) -> pd.DataFrame:
         precos = precos.to_frame(tickers_yf[0])
 
     precos.columns = [c.replace(".SA", "").upper() for c in precos.columns]
-    precos = precos.ffill().dropna()
+    # Antes: precos.ffill().dropna() apagava TODAS as datas se um único ticker
+    # viesse vazio do Yahoo (ativo deslistado) ou tivesse estreado há pouco,
+    # e nenhum indicador estatístico era salvo. Agora só saem as colunas vazias;
+    # o início de cada série fica como NaN e cada ativo usa os dias que tem.
+    precos = precos.dropna(axis=1, how="all").ffill()
 
     logger.info(f"Preços baixados: {precos.shape[0]} pregões x {precos.shape[1]} ativos")
     return precos
@@ -75,7 +79,10 @@ def calcular_retornos_log(precos: pd.DataFrame) -> pd.DataFrame:
     O log-retorno tem propriedade de aditividade temporal e é o padrão
     em finanças quantitativas (diferente do retorno simples pct_change).
     """
-    return np.log(precos / precos.shift(1)).dropna()
+    ret = np.log(precos / precos.shift(1))
+    if isinstance(ret, pd.DataFrame):
+        return ret.iloc[1:].dropna(how="all")   # mantém datas em que algum ativo negociou
+    return ret.dropna()
 
 
 # =============================================================================

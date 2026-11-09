@@ -39,7 +39,7 @@ def carteira_view(request):
         "setores": _setores_disponiveis(df, perfil),
         "qtd_ativos": cfg["qtd_ativos"],
         "max_pct": int(cfg["max_pct_ativo"] * 100),
-        "macro": KpiMacro.objects.order_by("-data_ref").first(),
+        "macro": __import__("scoring.services.macro", fromlist=["x"]).macro_consolidado(),
     })
 
 

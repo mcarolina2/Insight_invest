@@ -35,6 +35,16 @@ class Command(BaseCommand):
         registros = consolidar_series(meses=meses)
         self.stdout.write(f"Datas encontradas: {len(registros)}")
 
+        # Quantos valores vieram de cada série (uma falha do BCB aparece aqui como 0)
+        from services.extractors.bcb_extractor import SERIES_BCB
+        for campo, (codigo, descricao) in SERIES_BCB.items():
+            n = sum(1 for r in registros if r.get(campo) is not None)
+            datas = [r["data_ref"] for r in registros if r.get(campo) is not None]
+            faixa = f"{min(datas):%m/%Y} a {max(datas):%m/%Y}" if datas else "—"
+            estilo = self.style.SUCCESS if n else self.style.ERROR
+            self.stdout.write(estilo(f"  {campo:16s} (SGS {codigo:>5}): {n:5d} valores  {faixa}"
+                                     + ("" if n else "  ← FALHOU (rode de novo; o BCB às vezes recusa)")))
+
         # 2. Salva no banco
         novos = 0
         atualizados = 0

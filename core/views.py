@@ -20,8 +20,15 @@ def _top_recentes(model, campo_data, campo_valor,
     """
     qs = (model.objects
           .select_related('ativo')
+          .filter(ativo__ativo=True)
           .order_by('ativo_id', f'-{campo_data}')
           .distinct('ativo_id'))
+    # Só ativos negociados: quem tem indicador estatístico tem cotação recente.
+    # (Evita no ranking empresas registradas na bolsa mas sem negócios, ex. PACA3.)
+    from market_data.models import KpiEstatistico
+    negociados = KpiEstatistico.objects.values('ativo_id')
+    if negociados.exists():
+        qs = qs.filter(ativo_id__in=negociados)
     if filtro_extra:
         qs = qs.filter(**filtro_extra)
     registros = [r for r in qs if getattr(r, campo_valor) is not None]
@@ -255,7 +262,8 @@ def home_view(request):
     ]
 
     # ── Macro ────────────────────────────────────────────────────
-    macro = KpiMacro.objects.order_by('-data_ref').first()
+    from scoring.services.macro import macro_consolidado
+    macro = macro_consolidado()
     score_macro = calcular_score_macro(macro) if macro else None
 
     # ── Notícias ─────────────────────────────────────────────────

@@ -111,3 +111,20 @@ class CorrigirTickersTests(TestCase):
                          {"ITUB3", "ITUB4"})
         self.assertEqual(Ativo.objects.get(ticker="WEGE3").cnpj, "84.429.695/0001-11")
         self.assertFalse(Ativo.objects.get(ticker="FECH3").ativo)
+
+
+class EstatisticoLoteTests(SimpleTestCase):
+    """Um ticker vazio no lote não pode apagar os dados dos outros."""
+
+    def test_coluna_vazia_nao_derruba_o_lote(self):
+        import numpy as np
+        from services.calculators.estatistico import calcular_retornos_log
+        idx = pd.bdate_range("2024-01-01", periods=300)
+        precos = pd.DataFrame({"VALE3": np.linspace(60, 70, 300), "PETR4": np.linspace(30, 35, 300),
+                               "MORTA3": np.nan, "NOVA3": [np.nan] * 200 + list(np.linspace(10, 11, 100))},
+                              index=idx)
+        precos = precos.dropna(axis=1, how="all").ffill()
+        r = calcular_retornos_log(precos)
+        self.assertEqual(r["VALE3"].dropna().size, 299)
+        self.assertEqual(r["NOVA3"].dropna().size, 99)
+        self.assertNotIn("MORTA3", r.columns)
