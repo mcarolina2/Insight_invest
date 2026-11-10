@@ -50,15 +50,19 @@ class Command(BaseCommand):
 
     def handle(self, *args, **o):
         from portfolio.models import Ativo
-        from scoring.services.precos import obter_ibovespa, obter_precos
+        from scoring.services.precos import obter_ibovespa, obter_precos, obter_volumes
 
-        tickers = sorted(set(Ativo.objects.filter(kpis_micro__isnull=False)
+        tickers = sorted(set(Ativo.objects.filter(kpis_micro__isnull=False, ativo=True)
                              .values_list("ticker", flat=True)))
         tickers = [t for t in tickers if t and 4 <= len(t) <= 6 and " " not in t]
         if not tickers:
             raise CommandError("Nenhum ativo com dados fundamentalistas (rode load_cvm_data).")
         self.stdout.write(f"Baixando {o['anos']} anos de preços de {len(tickers)} ativos...")
         precos = obter_precos(tickers, anos=o["anos"])
+        volumes = obter_volumes(tickers, anos=o["anos"])
+        if volumes is None:
+            self.stdout.write(self.style.WARNING(
+                "Sem dados de volume: o filtro de liquidez não será aplicado no backtest."))
         if precos.empty:
             raise CommandError("Não foi possível obter preços (sem internet ou Yahoo indisponível).")
         ibov = obter_ibovespa(anos=o["anos"])
@@ -75,7 +79,8 @@ class Command(BaseCommand):
             res = executar_backtest(
                 precos, perfis=o["perfis"], ibovespa=ibov, inicio=o["inicio"], fim=o["fim"],
                 janela_cal=o["janela_calibracao"], janela_teste=o["janela_teste"],
-                modelo=o["modelo"], reamostragens=o["reamostragens"], progresso=progresso)
+                modelo=o["modelo"], reamostragens=o["reamostragens"], progresso=progresso,
+                volumes=volumes)
         except ValueError as e:
             raise CommandError(str(e))
 
@@ -177,7 +182,7 @@ class Command(BaseCommand):
             for custo in (f"{c:.4f}" for c in CUSTOS_PADRAO):
                 self.stdout.write(self.style.MIGRATE_HEADING(f"\n{NOMES_PERFIL[perfil]} — custo {float(custo):.2%}"))
                 self.stdout.write(f"{'carteira':34s} {'ret.a.a':>8s} {'vol':>7s} {'sharpe':>7s} {'sortino':>8s} "
-                                  f"{'MDD':>7s} {'CVaR':>7s} {'turn':>6s} {'p(LW)':>6s}")
+                                  f"{'MDD':>7s} {'CVaR':>7s} {'turn':>6s}  {'p(LW)':>6s}")
                 testes = rp["testes"].get(custo, {})
                 for est, m in rp["metricas"][custo].items():
                     if not m:
@@ -186,7 +191,7 @@ class Command(BaseCommand):
                     self.stdout.write(
                         f"{ESTRATEGIAS[est]:34s} {m['retorno_anual']:8.1%} {m['volatilidade']:7.1%} "
                         f"{m['sharpe']:7.2f} {m['sortino']:8.2f} {m['max_drawdown']:7.1%} {m['cvar95']:7.2%} "
-                        f"{(m['turnover_medio'] if pd.notna(m['turnover_medio']) else 0):6.1%} "
+                        f"{(m['turnover_medio'] if pd.notna(m['turnover_medio']) else 0):6.1%}  "
                         f"{('' if pv is None else f'{pv:.3f}'):>6s}")
             cm = rp["camada_macro"]["jaccard_medio"]
             if cm is not None:

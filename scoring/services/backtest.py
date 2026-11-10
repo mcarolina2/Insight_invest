@@ -260,7 +260,11 @@ def executar_backtest(precos: pd.DataFrame, perfis=("conservador", "intermediari
                       fim: date | None = None, janela_cal: int = JANELA_CALIBRACAO,
                       janela_teste: int = JANELA_TESTE, custos=CUSTOS_PADRAO,
                       modelo: str | None = None, reamostragens: int = 2000,
-                      progresso=None) -> dict:
+                      progresso=None, volumes: pd.DataFrame | None = None) -> dict:
+    """volumes: volume diário (ações) por ticker. Se informado, aplica em cada
+    data o mesmo filtro de liquidez da plataforma, com os 126 pregões até t."""
+    from django.conf import settings as cfg_django
+    from scoring.services.precos import liquidez
     precos = precos.sort_index()
     precos.index = pd.to_datetime(precos.index)
     if fim:
@@ -299,6 +303,12 @@ def executar_backtest(precos: pd.DataFrame, perfis=("conservador", "intermediari
             mercado = ibovespa.iloc[t - janela_cal + 1: t + 1] if ibovespa is not None and not ibovespa.empty else None
             estat = estatisticas_janela(janela, mercado)
             negociaveis = set(estat.index) & set(precos.columns[precos.iloc[t].notna()])
+            if volumes is not None and not volumes.empty:
+                liq = liquidez(precos.iloc[: t + 1], volumes.loc[volumes.index <= datas[t]])
+                if not liq.empty:
+                    ok_liq = liq[(liq["volume_financeiro"] >= cfg_django.LIQUIDEZ_MINIMA_DIARIA)
+                                 & (liq["pregoes_com_negocio"] >= cfg_django.PREGOES_COM_NEGOCIO_MIN)].index
+                    negociaveis &= set(ok_liq)
             df = calcular_scores_v2(perfil, data_ref=d, estat_externo=estat)
             if df.empty:
                 continue

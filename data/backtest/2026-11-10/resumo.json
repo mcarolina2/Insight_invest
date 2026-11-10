@@ -1,0 +1,58 @@
+{
+  "periodo": {
+    "inicio": "2021-11-30",
+    "fim": "2026-11-09",
+    "rebalanceamentos": 20,
+    "janela_calibracao": 504,
+    "janela_teste": 63
+  },
+  "hipoteses_custo_0,10%": {
+    "conservador": {
+      "H1": false,
+      "H2": false
+    },
+    "intermediario": {
+      "H1": false,
+      "H2": false
+    },
+    "arrojado": {
+      "H1": false,
+      "H2": false
+    },
+    "H3": {
+      "volatilidade_crescente": true,
+      "drawdown_crescente": true
+    }
+  },
+  "camada_macro": {
+    "conservador": {
+      "jaccard_medio_com_vs_sem_macro": 1.0
+    },
+    "intermediario": {
+      "jaccard_medio_com_vs_sem_macro": 1.0
+    },
+    "arrojado": {
+      "jaccard_medio_com_vs_sem_macro": 1.0
+    }
+  },
+  "n_ativos_medio": {
+    "conservador": {
+      "combinada": 8.0,
+      "fundamentalista": 8.0,
+      "estatistica": 8.0,
+      "igual": 8.0
+    },
+    "intermediario": {
+      "combinada": 8.65,
+      "fundamentalista": 8.5,
+      "estatistica": 8.65,
+      "igual": 10.0
+    },
+    "arrojado": {
+      "combinada": 15.0,
+      "fundamentalista": 15.0,
+      "estatistica": 15.0,
+      "igual": 15.0
+    }
+  }
+}

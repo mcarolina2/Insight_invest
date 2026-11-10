@@ -596,3 +596,18 @@ class LiquidezTests(TestCase):
         liq = liquidez(p, v)
         self.assertEqual(liq.loc["A", "volume_financeiro"], 2_000_000)
         self.assertAlmostEqual(liq.loc["B", "pregoes_com_negocio"], 10 / 126)
+
+
+class BacktestLiquidezTests(TestCase):
+    def test_iliquida_fica_fora_do_backtest(self):
+        from scoring.services.backtest import executar_backtest
+        criar_base()
+        tickers = list(Ativo.objects.values_list("ticker", flat=True))
+        precos = precos_simulados(tickers, anos=3)
+        vol = pd.DataFrame(500_000.0, index=precos.index, columns=precos.columns)
+        ruim = tickers[0]
+        vol[ruim] = 0.0
+        r = executar_backtest(precos, perfis=["arrojado"], reamostragens=20, volumes=vol)
+        for por_data in r["perfis"]["arrojado"]["carteiras"].values():
+            for pesos in por_data.values():
+                self.assertNotIn(ruim, pesos)

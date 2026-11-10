@@ -75,6 +75,9 @@ class Command(BaseCommand):
 
         # ── 1. Cadastro ────────────────────────────────────────────────
         total = Ativo.objects.count()
+        ativos_qs = Ativo.objects.filter(ativo=True)
+        n_ativos = ativos_qs.count()
+        n_inativos = total - n_ativos
         por_tipo = pd.Series(list(Ativo.objects.values_list("tipo", flat=True))).value_counts().to_dict()
         com_cnpj = Ativo.objects.exclude(cnpj__isnull=True).exclude(cnpj="").count()
         n_setores = Ativo.objects.exclude(setor="").values("setor").distinct().count()
@@ -82,7 +85,8 @@ class Command(BaseCommand):
         # ── 2. Fundamentalistas: último KpiMicro por ativo ────────────
         campos_fund = [c for c, _ in INDICADORES_FUND]
         micro = pd.DataFrame(list(
-            KpiMicro.objects.order_by("ativo_id", "-data_ref").distinct("ativo_id")
+            KpiMicro.objects.filter(ativo__ativo=True)
+            .order_by("ativo_id", "-data_ref").distinct("ativo_id")
             .values("ativo_id", "ativo__ticker", "data_ref", *campos_fund)
         ))
         universo = micro["ativo__ticker"].tolist() if not micro.empty else []
@@ -111,21 +115,28 @@ class Command(BaseCommand):
             dados = yf.download([f"{t}.SA" for t in universo], period="3y",
                                 auto_adjust=False, progress=False, threads=True)
             close, volume = dados["Close"], dados["Volume"]
+            close.columns = [str(c).replace(".SA", "") for c in close.columns]
+            volume.columns = [str(c).replace(".SA", "") for c in volume.columns]
             n_obs = close.notna().sum()
             ok_hist = n_obs[n_obs >= MIN_PREGOES].index
             n_hist = len(ok_hist)
-            vol_fin = (close * volume).tail(PREGOES_6M).mean()
-            n_liq = int((vol_fin.reindex(ok_hist) > LIMIAR_VOLUME).sum())
-            pd.DataFrame({"n_pregoes_3a": n_obs, "volume_financeiro_medio_6m": vol_fin}) \
+            # mesmo critério da plataforma (scoring.services.precos.liquidez)
+            from django.conf import settings as cfg
+            from scoring.services.precos import liquidez
+            liq = liquidez(close, volume)
+            passa = ((liq["volume_financeiro"] >= cfg.LIQUIDEZ_MINIMA_DIARIA)
+                     & (liq["pregoes_com_negocio"] >= cfg.PREGOES_COM_NEGOCIO_MIN))
+            n_liq = int(passa.reindex(ok_hist).fillna(False).sum())
+            pd.DataFrame({"n_pregoes_3a": n_obs, **liq.to_dict("series")}) \
               .to_csv(os.path.join(PASTA_SAIDA, "historico_liquidez_por_ativo.csv"))
 
         # ── Tabela: funil ─────────────────────────────────────────────
         funil = pd.DataFrame([
-            ("Ativos mapeados na B3", total),
-            ("Com CNPJ mapeado na CVM", com_cnpj),
+            ("Ativos no cadastro", total),
+            ("Com ação negociada em bolsa, segundo o FCA (ativos)", n_ativos),
             ("Com indicadores fundamentalistas calculados", n_universo),
             (f"Com ao menos {MIN_PREGOES} pregões na janela de 3 anos", n_hist),
-            ("Com volume financeiro médio diário > R$ 1 mi (6 meses)", n_liq),
+            ("Com liquidez mínima (filtro da plataforma, 6 meses)", n_liq),
         ], columns=["Etapa", "Ativos"])
         funil.to_csv(os.path.join(PASTA_SAIDA, "funil.csv"), index=False)
 
@@ -137,9 +148,22 @@ class Command(BaseCommand):
         for c, rot in INDICADORES_ESTAT:
             v = estat_num[c].notna().sum() if not estat_num.empty else 0
             linhas.append(("Yahoo Finance / estatística", rot, 100 * v / max(n_universo, 1)))
+        # Macro: % de MESES (PIB: de anos) com valor. A base mistura linhas
+        # diárias (Selic) e mensais; contar linhas subestimaria as séries mensais.
+        if not macro.empty:
+            m = macro.copy()
+            m["data_ref"] = pd.to_datetime(m["data_ref"])
+            m = m.set_index("data_ref").apply(pd.to_numeric, errors="coerce")
+            mensal = m.resample("ME").count() > 0
+            anual = m.resample("YE").count() > 0
         for c in CAMPOS_MACRO:
-            v = macro[c].notna().mean() * 100 if not macro.empty else 0
-            linhas.append(("BCB / macroeconômica (meses, 10 anos)", c, v))
+            if macro.empty:
+                v = 0
+            elif c == "pib_trimestral":          # série 7326 é anual
+                v = anual[c].mean() * 100
+            else:
+                v = mensal[c].mean() * 100
+            linhas.append(("BCB / macroeconômica (% dos meses, 10 anos)", c, v))
         completude = pd.DataFrame(linhas, columns=["Fonte", "Indicador", "Completude_%"])
         completude.to_csv(os.path.join(PASTA_SAIDA, "completude.csv"), index=False)
 
@@ -165,7 +189,7 @@ class Command(BaseCommand):
         # ── Impressão ─────────────────────────────────────────────────
         pd.set_option("display.width", 160)
         out(self.style.SUCCESS("\n== CADASTRO =="))
-        out(f"Total: {total} | por tipo: {por_tipo} | com CNPJ: {com_cnpj} "
+        out(f"Total: {total} (ativos: {n_ativos}, inativos: {n_inativos}) | por tipo: {por_tipo} | com CNPJ: {com_cnpj} "
             f"({100 * com_cnpj / max(total, 1):.1f}%) | setores: {n_setores}")
         out(self.style.SUCCESS("\n== FUNIL ==")); out(funil.to_string(index=False))
         out(self.style.SUCCESS("\n== COMPLETUDE ==")); out(completude.round(1).to_string(index=False))

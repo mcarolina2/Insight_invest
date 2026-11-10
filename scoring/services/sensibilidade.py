@@ -89,7 +89,11 @@ def analisar_perfil(perfil: str, data_ref: date | None = None) -> dict:
             sel = _selecao(perfil, cfg_base, data_ref)
         neutralidade.append({"perfil": perfil, "valor_ausente": valor, "jaccard": jaccard(base, sel),
                              "entram": sorted(set(sel) - set(base)), "saem": sorted(set(base) - set(sel))})
-    js = [l["jaccard"] for l in linhas]
+    for l in linhas:
+        l["consistente"] = l["rc"] < 0.10
+    # resumo só com alterações que mantêm a matriz consistente (RC < 0,10);
+    # as inconsistentes continuam no CSV, marcadas.
+    js = [l["jaccard"] for l in linhas if l["consistente"]]
     return {"perfil": perfil, "selecao_base": base, "julgamentos": linhas, "neutralidade": neutralidade,
             "jaccard_medio": float(np.mean(js)) if js else None,
             "jaccard_minimo": float(np.min(js)) if js else None,

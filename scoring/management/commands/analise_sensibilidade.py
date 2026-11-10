@@ -50,7 +50,10 @@ class Command(BaseCommand):
             if r["jaccard_medio"] is None:
                 self.stdout.write("  sem ativos selecionados")
                 continue
-            self.stdout.write(f"  {len(r['julgamentos'])} alterações de ±1 grau: Jaccard médio {r['jaccard_medio']:.2f}, "
+            inconsist = sum(1 for l in r["julgamentos"] if not l["consistente"])
+            if inconsist:
+                self.stdout.write(f"  {inconsist} alteração(ões) com RC >= 0,10 fora do resumo (matriz inconsistente)")
+            self.stdout.write(f"  {len(r['julgamentos']) - inconsist} alterações de ±1 grau: Jaccard médio {r['jaccard_medio']:.2f}, "
                               f"mínimo {r['jaccard_minimo']:.2f}; seleção idêntica em {r['frac_identica']:.0%}")
             piores = sorted(r["julgamentos"], key=lambda l: l["jaccard"])[:3]
             for l in piores:
@@ -64,7 +67,7 @@ class Command(BaseCommand):
         linhas = []
         for p, r in res.items():
             neu = {n["valor_ausente"]: n["jaccard"] for n in r["neutralidade"]}
-            linhas.append(" & ".join([NOMES.get(p, p), str(len(r["julgamentos"])), _br(r["jaccard_medio"]),
+            linhas.append(" & ".join([NOMES.get(p, p), str(sum(1 for l in r["julgamentos"] if l["consistente"])), _br(r["jaccard_medio"]),
                                       _br(r["jaccard_minimo"]),
                                       "--" if r["frac_identica"] is None else f"{r['frac_identica']*100:.0f}\\%",
                                       _br(neu.get(25.0)), _br(neu.get(0.0))]) + " \\\\\n\\hline")
@@ -77,5 +80,5 @@ class Command(BaseCommand):
                 + "\n".join(linhas) +
                 "\n\\end{tabular}\n\n\\vspace{0.2cm}\n"
                 "\\small Nota: cada julgamento das matrizes de dimensões e de camadas foi alterado em um grau da "
-                "escala de Saaty, para cima e para baixo; $J$ é o índice de Jaccard entre a seleção original e a "
+                "escala de Saaty, para cima e para baixo; alterações que tornam a matriz inconsistente (RC $\\geq$ 0,10) foram desconsideradas; $J$ é o índice de Jaccard entre a seleção original e a "
                 "alterada.\\\\\nFonte: Elaboração própria.\n\\end{table}\n")

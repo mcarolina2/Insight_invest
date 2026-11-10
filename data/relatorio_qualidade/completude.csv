@@ -1,0 +1,14 @@
+Fonte,Indicador,Completude_%
+CVM / fundamentalista,Liquidez corrente,98.59649122807018
+CVM / fundamentalista,ROE,87.36842105263158
+CVM / fundamentalista,ROA,99.29824561403508
+CVM / fundamentalista,Margem líquida,98.24561403508773
+CVM / fundamentalista,Margem EBITDA,98.94736842105263
+CVM / fundamentalista,Dívida líq./EBITDA,92.28070175438596
+CVM / fundamentalista,Cresc. receita,98.59649122807018
+Yahoo Finance / estatística,Volatilidade anual,87.01754385964912
+Yahoo Finance / estatística,Beta,87.01754385964912
+"BCB / macroeconômica (% dos meses, 10 anos)",selic,96.94656488549617
+"BCB / macroeconômica (% dos meses, 10 anos)",ipca_mensal,95.41984732824427
+"BCB / macroeconômica (% dos meses, 10 anos)",pib_trimestral,90.9090909090909
+"BCB / macroeconômica (% dos meses, 10 anos)",desemprego,95.41984732824427
