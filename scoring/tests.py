@@ -556,3 +556,43 @@ class MacroConsolidadoTests(TestCase):
         self.assertAlmostEqual(m.ipca_12m, 6.17, places=2)
         so_ultima = KpiMacro.objects.order_by("-data_ref").first()
         self.assertNotEqual(calcular_score_macro(m), calcular_score_macro(so_ultima))
+
+
+class LiquidezTests(TestCase):
+    """Ação quase sem negócios (preço repetido, volume ~0) não entra na carteira."""
+
+    def test_iliquida_e_substituida(self):
+        criar_base()
+        from scoring.services.carteira import montar_carteira_otimizada
+        from scoring.services.motor_scoring_v2 import calcular_scores_v2, config_perfil
+        df = calcular_scores_v2("conservador")
+        qtd = config_perfil("conservador")["qtd_ativos"]
+        topo = df.sort_values("score_final", ascending=False)["ticker"].iloc[0]
+
+        def com_volume(tickers, anos=3):
+            p = precos_simulados(tickers, anos)
+            vol = pd.DataFrame(500_000.0, index=p.index, columns=p.columns)   # ~R$ 10+ mi/dia
+            if topo in p:
+                p[topo] = 5.0                                                  # preço parado
+                vol[topo] = 0.0
+                vol.loc[vol.index[::40], topo] = 100.0                         # negócio raro
+            p.attrs["volume"] = vol
+            return p
+
+        with patch("scoring.services.precos.baixar_precos", side_effect=com_volume):
+            cache.clear()
+            res = montar_carteira_otimizada(df, "conservador", modelo="score", calcular_fronteira=False)
+        self.assertNotIn(topo, res["alocacao"])
+        self.assertEqual(len(res["alocacao"]), qtd)
+        self.assertIn("Pouca negociação", res["aviso"])
+        self.assertIn(topo, res["aviso"])
+
+    def test_metricas_de_liquidez(self):
+        from scoring.services.precos import liquidez
+        idx = pd.bdate_range("2026-01-01", periods=130)
+        p = pd.DataFrame({"A": 10.0, "B": 2.0}, index=idx)
+        v = pd.DataFrame({"A": 200_000.0, "B": 0.0}, index=idx)
+        v.loc[idx[-10:], "B"] = 1_000.0
+        liq = liquidez(p, v)
+        self.assertEqual(liq.loc["A", "volume_financeiro"], 2_000_000)
+        self.assertAlmostEqual(liq.loc["B", "pregoes_com_negocio"], 10 / 126)

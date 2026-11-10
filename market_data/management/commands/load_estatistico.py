@@ -96,6 +96,11 @@ class Command(BaseCommand):
                 stats = calcular_estatisticas_ativo(
                     preco_serie, retorno_serie, ret_ibov
                 )
+                # NaN/inf (ex.: série de preço constante, sem correlação definida)
+                # viram "sem dado" em vez de erro ao gravar no banco.
+                import math
+                stats = {k: (None if isinstance(v, float) and not math.isfinite(v) else v)
+                         for k, v in stats.items()}
 
                 with transaction.atomic():
                     KpiEstatistico.objects.update_or_create(

@@ -181,3 +181,11 @@ if not DEBUG:
 LOGIN_URL      = '/login/'        # onde redirecionar quem não está logado
 LOGIN_REDIRECT_URL = '/carteira/' # para onde ir após fazer login
 LOGOUT_REDIRECT_URL = '/login/'   # para onde ir após logout
+
+# ── Filtro de liquidez das carteiras ────────────────────────────────────
+# Mediana do volume financeiro diário nos últimos ~6 meses (R$) e fração
+# mínima de pregões com negócio. Abaixo disso o ativo é pulado na seleção:
+# ações quase sem negócios repetem o preço no Yahoo, parecem ter risco quase
+# zero e distorcem a otimização (ruído de microestrutura).
+LIQUIDEZ_MINIMA_DIARIA = float(os.environ.get("LIQUIDEZ_MINIMA_DIARIA", 1_000_000))
+PREGOES_COM_NEGOCIO_MIN = float(os.environ.get("PREGOES_COM_NEGOCIO_MIN", 0.8))

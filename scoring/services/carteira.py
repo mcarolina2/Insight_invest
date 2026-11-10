@@ -8,7 +8,9 @@ import pandas as pd
 
 from scoring.services.motor_scoring_v2 import config_perfil, selecionar_candidatos
 from scoring.services.otimizador import MIN_OBSERVACOES, otimizar
-from scoring.services.precos import obter_precos
+from django.conf import settings
+
+from scoring.services.precos import liquidez, obter_precos, obter_volumes
 from scoring.services.renda_fixa import PERDA_MAX_POR_PERFIL, montar_carteira_completa
 
 # Filtros da página -> parâmetros (Quadro "Modelo de alocação e restrições" do TCC)
@@ -54,6 +56,19 @@ def _tem_historico(precos: pd.DataFrame | None, ticker: str) -> bool:
             and int(precos[ticker].notna().sum()) >= MIN_OBSERVACOES)
 
 
+def _iliquido(liq: pd.DataFrame, ticker: str) -> bool:
+    """True se o ticker não atinge a liquidez mínima (sem dado de volume, não filtra)."""
+    if liq is None or liq.empty or ticker not in liq.index:
+        return False
+    linha = liq.loc[ticker]
+    return (linha["volume_financeiro"] < settings.LIQUIDEZ_MINIMA_DIARIA
+            or linha["pregoes_com_negocio"] < settings.PREGOES_COM_NEGOCIO_MIN)
+
+
+def _fmt_reais(v: float) -> str:
+    return f"R$ {v / 1e6:.1f} mi".replace(".", ",") if v >= 1e6 else f"R$ {v / 1e3:.0f} mil"
+
+
 def _candidatos_negociaveis(df_scores, perfil, setor_filtro, precos=None, rodadas: int = 4):
     """
     Seleciona os `qtd_ativos` melhores do ranking QUE TÊM histórico de preços.
@@ -90,21 +105,25 @@ def _candidatos_negociaveis(df_scores, perfil, setor_filtro, precos=None, rodada
         return ranking[ranking["ticker"].isin(escolhidos)], precos[escolhidos], sem
 
     lote = max(qtd * 2, 20)
-    testados, ok, sem, quadros = 0, [], [], []
+    testados, ok, sem, quadros, iliquidos = 0, [], [], [], []
     for _ in range(rodadas):
         bloco = ranking["ticker"].iloc[testados: testados + lote].tolist()
         if not bloco:
             break
         testados += len(bloco)
         p = obter_precos(bloco)
+        liq = liquidez(p, obter_volumes(bloco)) if p is not None and not p.empty else None
         if p is not None and not p.empty:
             quadros.append(p)
         for t in bloco:
-            if _tem_historico(p, t):
+            if _tem_historico(p, t) and not _iliquido(liq, t):
                 if empresa[t] not in {empresa[x] for x in ok}:
                     ok.append(t)
             elif len(ok) < qtd:          # só reporta os que teriam entrado na carteira
-                sem.append(t)
+                if _tem_historico(p, t):
+                    iliquidos.append(f"{t} ({_fmt_reais(liq.loc[t, 'volume_financeiro'])}/dia)")
+                else:
+                    sem.append(t)
         if len(ok) >= qtd:
             break
     escolhidos = ok[:qtd]
@@ -113,6 +132,8 @@ def _candidatos_negociaveis(df_scores, perfil, setor_filtro, precos=None, rodada
         return topo, (pd.concat(quadros, axis=1) if quadros else pd.DataFrame()), []
     precos = pd.concat(quadros, axis=1)
     precos = precos.loc[:, ~precos.columns.duplicated()][escolhidos]
+    if iliquidos:
+        sem = sem + ["__ILIQ__" + x for x in iliquidos]
     return ranking[ranking["ticker"].isin(escolhidos)], precos, sem
 
 
@@ -140,7 +161,7 @@ def montar_carteira_otimizada(
     if candidatos.empty:
         msg = "Nenhum ativo atende aos critérios do seu perfil"
         if sem_preco:
-            msg += " com histórico de preços disponível"
+            msg += " com histórico de preços e liquidez suficientes"
         raise CarteiraVazia(msg + (f" no setor {setor_filtro}." if setor_filtro else "."))
 
     scores = candidatos.set_index("ticker")["score_final"]
@@ -165,9 +186,16 @@ def montar_carteira_otimizada(
     }
 
     aviso = res.aviso
-    if sem_preco:
-        nota = ("Sem histórico de preços no Yahoo Finance (substituídos pelos próximos do ranking): "
-                + ", ".join(sorted(sem_preco)) + ".")
+    sem_hist = sorted(t for t in sem_preco if not t.startswith("__ILIQ__"))
+    pouca_liq = [t.replace("__ILIQ__", "") for t in sem_preco if t.startswith("__ILIQ__")]
+    notas = []
+    if sem_hist:
+        notas.append("Sem histórico de preços no Yahoo Finance (substituídos pelos próximos do ranking): "
+                     + ", ".join(sem_hist) + ".")
+    if pouca_liq:
+        notas.append(f"Pouca negociação, abaixo de {_fmt_reais(settings.LIQUIDEZ_MINIMA_DIARIA)}/dia "
+                     "(substituídos): " + ", ".join(pouca_liq) + ".")
+    for nota in notas:
         aviso = f"{aviso} {nota}" if aviso else nota
 
     return {
