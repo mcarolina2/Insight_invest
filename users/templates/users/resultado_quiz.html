@@ -2,7 +2,7 @@
 {% block titulo %}Seu perfil — Insight Invest{% endblock %}
 {% block estilo %}
   .selo{display:inline-block;padding:4px 14px;border-radius:20px;font-size:13px;font-weight:600;margin-bottom:10px}
-  .selo.conservador{background:#052e16;color:#22c55e}.selo.intermediario{background:#1e1b4b;color:#8b85ff}.selo.arrojado{background:#1c1004;color:#f59e0b}
+  .selo.conservador{background:var(--tint-green);color:#22c55e}.selo.intermediario{background:var(--tint-accent);color:#8b85ff}.selo.arrojado{background:var(--tint-amber);color:#f59e0b}
   .dim{margin:0 0 12px}
   .dim .rot{display:flex;justify-content:space-between;font-size:13px;margin-bottom:4px}
   .barra{height:8px;background:var(--surface2);border-radius:6px;overflow:hidden}
@@ -36,7 +36,7 @@
     <div class="barra"><div style="width:{% widthratio d.pontos d.maximo 100 %}%"></div></div>
   </div>
   {% endfor %}
-  <p class="muted" style="margin-top:12px">Faixas: conservador até 8 pontos · intermediário de 9 a 15 · arrojado de 16 a 21.</p>
+  <p class="muted" style="margin-top:12px">Faixas: conservador até 9 pontos · intermediário de 10 a 17 · arrojado de 18 a 24. Se o horizonte for de até 1 ano ou você não aceitar nenhuma perda, o perfil é conservador, qualquer que seja a pontuação.</p>
 </div>
 
 {% if regras %}

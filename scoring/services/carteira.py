@@ -69,7 +69,8 @@ def _fmt_reais(v: float) -> str:
     return f"R$ {v / 1e6:.1f} mi".replace(".", ",") if v >= 1e6 else f"R$ {v / 1e3:.0f} mil"
 
 
-def _candidatos_negociaveis(df_scores, perfil, setor_filtro, precos=None, rodadas: int = 4):
+def _candidatos_negociaveis(df_scores, perfil, setor_filtro, precos=None, rodadas: int = 4,
+                            qtd: int | None = None):
     """
     Seleciona os `qtd_ativos` melhores do ranking QUE TÊM histórico de preços.
 
@@ -80,7 +81,7 @@ def _candidatos_negociaveis(df_scores, perfil, setor_filtro, precos=None, rodada
     Retorna (candidatos, precos, tickers_sem_preco).
     """
     cfg = config_perfil(perfil)
-    qtd = cfg["qtd_ativos"]
+    qtd = int(qtd or cfg["qtd_ativos"])
     ranking = selecionar_candidatos(df_scores, perfil, setor_filtro, cfg={**cfg, "qtd_ativos": 10 ** 6},
                                     um_por_empresa=False)
     if ranking.empty:
@@ -147,6 +148,7 @@ def montar_carteira_otimizada(
     calcular_fronteira: bool = True,
     precos: pd.DataFrame | None = None,
     rf: float | None = None,
+    qtd_ativos: int | None = None,
 ) -> dict:
     """
     Retorna:
@@ -157,18 +159,27 @@ def montar_carteira_otimizada(
       aviso            : texto para o usuário ou None
       fronteira        : [{vol, ret}, ...]
     """
-    candidatos, precos, sem_preco = _candidatos_negociaveis(df_scores, perfil, setor_filtro, precos)
+    candidatos, precos, sem_preco = _candidatos_negociaveis(df_scores, perfil, setor_filtro, precos,
+                                                            qtd=qtd_ativos)
     if candidatos.empty:
         msg = "Nenhum ativo atende aos critérios do seu perfil"
         if sem_preco:
             msg += " com histórico de preços e liquidez suficientes"
-        raise CarteiraVazia(msg + (f" no setor {setor_filtro}." if setor_filtro else "."))
+        setores = [setor_filtro] if isinstance(setor_filtro, str) else list(setor_filtro or [])
+        if len(setores) == 1:
+            onde = f" no setor {setores[0]}."
+        elif setores:
+            onde = f" nos setores {', '.join(setores[:-1])} e {setores[-1]}."
+        else:
+            onde = "."
+        raise CarteiraVazia(msg + onde)
 
     scores = candidatos.set_index("ticker")["score_final"]
 
+    w_max = config_perfil(perfil)["max_pct_ativo"]
     res = otimizar(
         precos, scores, modelo=modelo,
-        w_max=config_perfil(perfil)["max_pct_ativo"],
+        w_max=w_max,
         retorno_alvo=retorno_alvo,
         volatilidade_maxima=volatilidade_maxima,
         taxa_livre_risco=taxa_livre_risco() if rf is None else rf,
@@ -206,6 +217,9 @@ def montar_carteira_otimizada(
         "aviso": aviso,
         "fronteira": res.fronteira,
         "precos": precos,          # usado pela análise estatística/macro (não vai para o JSON)
+        "qtd_ativos": int(qtd_ativos or config_perfil(perfil)["qtd_ativos"]),
+        # teto efetivo: com poucas ações o otimizador sobe o teto para 1/n (soma = 100%)
+        "max_pct": round(max(w_max, 1 / max(len(candidatos), 1)) * 100, 1),
     }
 
 

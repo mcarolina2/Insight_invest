@@ -233,7 +233,4 @@ def _inferir_tipo(ticker):
     return "acao"
 
 
-def _limpar_setor(setor):
-    if not setor or str(setor).strip() in ("nan", ""):
-        return ""
-    return str(setor).split(". ", 1)[-1].strip()[:100]
+from services.setores import limpar_setor as _limpar_setor  # noqa: E402

@@ -4,6 +4,7 @@ Testes ponta a ponta da plataforma com dados simulados (sem acesso à internet).
 Rodar:  python manage.py test
 Os preços do Yahoo Finance são substituídos por séries simuladas.
 """
+import io
 import json
 import zlib
 from datetime import date, timedelta
@@ -72,7 +73,7 @@ def criar_base():
 
 
 def respostas_quiz(valor):
-    """Mesma alternativa (0 a 3) em todas as 7 perguntas."""
+    """Mesma alternativa (0 a 3) em todas as perguntas."""
     from users.suitability import PERGUNTAS
     return {p["id"]: str(valor) for p in PERGUNTAS}
 
@@ -127,7 +128,8 @@ class FluxoCompletoTests(TestCase):
         self._usuario_com_perfil(1)
         import re
         html = self.client.get(reverse("users:quiz")).content.decode()
-        self.assertEqual(len(re.findall(r"required\s+checked", html)), 7)
+        from users.suitability import PERGUNTAS
+        self.assertEqual(len(re.findall(r"required\s+checked", html)), len(PERGUNTAS))
 
     def test_paginas_do_usuario(self, _):
         self._usuario_com_perfil()
@@ -178,6 +180,38 @@ class FluxoCompletoTests(TestCase):
         self.assertEqual(r.status_code, 422)
         self.assertIn("Inexistente", r.json()["erro"])
 
+    def test_varios_setores_e_numero_de_acoes(self, _):
+        self._usuario_com_perfil(2)
+        setores = sorted({a.setor for a in Ativo.objects.all()})[:2]
+        d = self._otimizar(risco="medio", retorno="medio", setores=setores, qtd_ativos=3).json()
+        acoes = [a for a in d["alocacao"] if a["tipo"] == "acao"]
+        self.assertTrue(acoes)
+        self.assertLessEqual(len(acoes), 3)
+        self.assertTrue(all(a["setor"] in setores for a in acoes))
+        self.assertEqual(d["qtd_ativos"], 3)
+        self.assertGreaterEqual(d["max_pct"], 100 / 3 - 0.1)      # teto sobe para 1/n
+        self.assertEqual(self._otimizar(risco="medio", retorno="medio", qtd_ativos=99).status_code, 400)
+        self.assertEqual(self._otimizar(risco="medio", retorno="medio", setores="Energia").status_code, 400)
+
+    def test_horizonte_e_comparacoes(self, _):
+        self._usuario_com_perfil(2)
+        d1 = self._otimizar(risco="medio", retorno="medio", horizonte=1).json()
+        d3 = self._otimizar(risco="medio", retorno="medio", horizonte=3).json()
+        e1, e3 = d1["analise"]["estatistica"], d3["analise"]["estatistica"]
+        self.assertLess(e1["n_dias"], e3["n_dias"])
+        self.assertLessEqual(e1["n_dias"], 266)          # ~1 ano de pregões (varia com o calendário)
+        ids = [x["id"] for x in e3["comparacao"]]
+        self.assertEqual(ids[0], "carteira")
+        self.assertIn("um_n", ids)
+        self.assertIn("renda_fixa", ids)
+        self.assertEqual(len(e3["serie"]["um_n"]), len(e3["serie"]["datas"]))
+        self.assertEqual(self._otimizar(risco="medio", retorno="medio", horizonte=4).status_code, 400)
+
+    def test_pagina_de_metodologia(self, _):
+        r = self.client.get(reverse("core:metodologia"))
+        self.assertContains(r, "Como o Insight Invest funciona")
+        self.assertContains(r, "Intermediário")
+
     def test_filtro_invalido(self, _):
         self._usuario_com_perfil(2)
         self.assertEqual(self._otimizar(risco="x", retorno="medio").status_code, 400)
@@ -191,7 +225,7 @@ class FluxoCompletoTests(TestCase):
 
     # ── fluxo em lote e home ─────────────────────────────────────────
     def test_atualizar_carteiras_e_home(self, _):
-        call_command("atualizar_carteiras", stdout=open("/dev/null", "w"))
+        call_command("atualizar_carteiras", stdout=io.StringIO())
         self.assertEqual(CarteiraRecomendada.objects.filter(ativo=True).count(), 3)
         for c in CarteiraRecomendada.objects.filter(ativo=True):
             self.assertAlmostEqual(sum(a["pct"] for a in c.composicao), 100, delta=0.2)
@@ -202,7 +236,7 @@ class FluxoCompletoTests(TestCase):
         self.assertContains(r, cart.composicao[0]["ticker"])
 
     def test_calcular_scores_salva_scoreativo(self, _):
-        call_command("calcular_scores", stdout=open("/dev/null", "w"))
+        call_command("calcular_scores", stdout=io.StringIO())
         self.assertEqual(ScoreAtivo.objects.count(), N_ATIVOS)
         self.assertTrue(ScoreAtivo.objects.exclude(score_estat=None).exists())
 
@@ -320,7 +354,7 @@ class RendaFixaTests(TestCase):
     @patch("scoring.services.precos.baixar_precos", side_effect=precos_simulados)
     def test_home_conservador_tem_mais_renda_fixa(self, _):
         criar_base()
-        call_command("atualizar_carteiras", stdout=open("/dev/null", "w"))
+        call_command("atualizar_carteiras", stdout=io.StringIO())
         rf = {c.perfil: c.metricas["pct_renda_fixa"] for c in CarteiraRecomendada.objects.filter(ativo=True)}
         self.assertGreater(rf["conservador"], rf["intermediario"])
         self.assertGreater(rf["intermediario"], rf["arrojado"])
@@ -328,6 +362,45 @@ class RendaFixaTests(TestCase):
         cons = CarteiraRecomendada.objects.get(perfil="conservador", ativo=True)
         self.assertEqual(cons.composicao[0]["tipo"], "renda_fixa")
         self.assertContains(self.client.get(reverse("core:home")), "Renda fixa")
+
+
+class CorrecoesV14Tests(TestCase):
+    def test_retorno_por_risco_pune_media_negativa(self):
+        """O |CV| antigo dava nota alta a ação em queda forte (média muito negativa)."""
+        from scoring.services.motor_scoring_v2 import calcular_score_estat
+        df = pd.DataFrame({
+            "volatilidade_anual": [0.30, 0.30, 0.30],
+            "beta": [1.0, 1.0, 1.0],
+            "cv": [10.0, 200.0, 20.0],                       # |dp / média|
+            "media_retorno": [-0.002, 0.0001, 0.001],        # queda forte, quase zero, alta
+            "dp_retorno": [0.02, 0.02, 0.02],
+        }, index=["CAI3", "ZERO3", "SOBE3"])
+        s = calcular_score_estat(df, "intermediario")
+        self.assertLess(s["CAI3"], s["ZERO3"])
+        self.assertLess(s["ZERO3"], s["SOBE3"])
+
+    def test_setores_cortados_sao_reparados(self):
+        from services.setores import limpar_setor, reparar_setor
+        self.assertEqual(limpar_setor("Construção Civil, Mat. Constr. e Decoração"),
+                         "Construção Civil, Mat. Constr. e Decoração")
+        self.assertEqual(limpar_setor(limpar_setor("Saneamento, Serv. Água e Gás")), "Saneamento, Serv. Água e Gás")
+        self.assertEqual(reparar_setor("e Decoração"), "Construção Civil, Mat. Constr. e Decoração")
+        self.assertEqual(reparar_setor("Part. - Alimentos"), "Holding - Alimentos")
+        self.assertEqual(limpar_setor("Emp. Adm. Part. - Bancos"), "Holding - Bancos")
+
+    def test_rankings_da_home_tiram_iliquidas_e_repetidas(self):
+        from core.views import _top_recentes
+        from market_data.models import KpiEstatistico, KpiMicro
+        hoje = date.today()
+        a1 = Ativo.objects.create(ticker="LIQU3", nome="Liquida", tipo="acao", setor="X", cnpj="11.111.111/0001-11")
+        a2 = Ativo.objects.create(ticker="LIQU4", nome="Liquida", tipo="acao", setor="X", cnpj="11.111.111/0001-11")
+        a3 = Ativo.objects.create(ticker="ILIQ3", nome="Iliquida", tipo="acao", setor="X", cnpj="22.222.222/0001-22")
+        for a, vol in ((a1, 5e6), (a2, 5e6), (a3, 3e4)):
+            KpiMicro.objects.create(ativo=a, data_ref=hoje, roe=0.3)
+            KpiEstatistico.objects.create(ativo=a, data_calculo=hoje, volume_mediano=vol, pregoes_com_negocio=1)
+        tickers = [k.ativo.ticker for k in _top_recentes(KpiMicro, "data_ref", "roe")]
+        self.assertEqual(len([t for t in tickers if t.startswith("LIQU")]), 1)
+        self.assertNotIn("ILIQ3", tickers)
 
 
 class AnaliseCarteiraTests(TestCase):
@@ -460,7 +533,7 @@ class BacktestTests(TestCase):
         pb = b["perfis"]["intermediario"]["carteiras"]["combinada"][primeira]
         self.assertEqual(pa, pb)
         m = a["perfis"]["intermediario"]["metricas"]["0.0010"]
-        self.assertEqual(set(m), {"combinada", "fundamentalista", "estatistica", "igual"})
+        self.assertEqual(set(m), {"combinada", "fundamentalista", "estatistica", "igual", "selic"})
 
     @patch("scoring.services.precos.baixar_ibovespa",
            side_effect=lambda anos=3: precos_simulados(["IBOVX", "Y1"], anos)["IBOVX"])
@@ -611,3 +684,21 @@ class BacktestLiquidezTests(TestCase):
         for por_data in r["perfis"]["arrojado"]["carteiras"].values():
             for pesos in por_data.values():
                 self.assertNotIn(ruim, pesos)
+
+
+class PatrimonioEPaginasTests(TestCase):
+    def test_patrimonio_com_e_sem_aportes(self):
+        from scoring.services.backtest import patrimonio
+        r = pd.Series([0.0] * 504)                               # dois anos sem variação
+        self.assertEqual(patrimonio(r)["valor_final"], 10_000)
+        p = patrimonio(r, 10_000, 10_000)
+        self.assertEqual(p["aplicado"], 20_000)                  # aporte no pregão 252
+        r = pd.Series([0.01, 0.01])
+        self.assertAlmostEqual(patrimonio(r)["valor_final"], 10_201, places=2)
+
+    def test_paginas_de_modelagem(self):
+        r = self.client.get(reverse("core:desempenho"))
+        self.assertEqual(r.status_code, 200)
+        r = self.client.get(reverse("core:metodologia"))
+        self.assertContains(r, "Nota técnica")
+        self.assertContains(r, "Situação financeira")

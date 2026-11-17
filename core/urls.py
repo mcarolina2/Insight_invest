@@ -8,4 +8,6 @@ urlpatterns = [
     path('', views.home_view, name='home'),
     path('buscar-ativo/', views.buscar_ativo, name='buscar_ativo'),
     path('ativo/<str:ticker>/', views.ativo_view, name='ativo'),
+    path('metodologia/', views.metodologia_view, name='metodologia'),
+    path('desempenho/', views.desempenho_view, name='desempenho'),
 ]

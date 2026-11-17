@@ -208,10 +208,4 @@ def _inferir_tipo(ticker: str) -> str:
     return "acao"
 
 
-def _limpar_setor(setor: str) -> str:
-    """Remove prefixos numéricos que a CVM inclui nos nomes de setor."""
-    if not setor or str(setor) == "nan":
-        return ""
-    # Ex: "1. Petróleo e Gás" → "Petróleo e Gás"
-    partes = str(setor).split(". ", 1)
-    return partes[-1].strip()[:100]
+from services.setores import limpar_setor as _limpar_setor  # noqa: E402

@@ -15,7 +15,7 @@
   .escore .n{font-size:22px;font-weight:700}
   .escore .r{font-size:11px;color:var(--muted)}
   .status{padding:10px 12px;border-radius:8px;font-size:13px}
-  .status.sim{background:#052e16;color:#86efac}.status.nao{background:var(--surface2);color:var(--muted)}
+  .status.sim{background:var(--tint-green);color:#86efac}.status.nao{background:var(--surface2);color:var(--muted)}
   table{width:100%;border-collapse:collapse;font-size:13px}
   th,td{padding:7px 6px;border-bottom:1px solid var(--border);text-align:right}
   th:first-child,td:first-child{text-align:left}
@@ -125,14 +125,16 @@
 {% block script %}
 {% if grafico_json %}
 <script>
-(function(){
+function desenharPreco(){
   const g = {{ grafico_json|safe }};
   const c = document.getElementById('grafico'), ctx = c.getContext('2d');
+  const tema = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+  ctx.clearRect(0, 0, c.width, c.height);
   const W = c.width, H = c.height, P = {t:12, r:16, b:28, l:72};
   const min = Math.min(...g.valores), max = Math.max(...g.valores), m = (max-min)*0.08 || 1;
   const x = i => P.l + i/(g.valores.length-1) * (W-P.l-P.r);
   const y = v => P.t + (1 - (v-(min-m))/((max+m)-(min-m))) * (H-P.t-P.b);
-  ctx.strokeStyle = '#2a3050'; ctx.fillStyle = '#8b93a7'; ctx.font = '11px system-ui'; ctx.textAlign = 'right';
+  ctx.strokeStyle = tema('--axis'); ctx.fillStyle = tema('--muted'); ctx.lineWidth = 1; ctx.font = '11px system-ui'; ctx.textAlign = 'right';
   for (let k=0; k<=4; k++){
     const v = (min-m) + k*((max+m)-(min-m))/4;
     ctx.beginPath(); ctx.moveTo(P.l, y(v)); ctx.lineTo(W-P.r, y(v)); ctx.stroke();
@@ -150,7 +152,9 @@
   ctx.fillStyle = grad; ctx.fill();
   ctx.beginPath(); g.valores.forEach((v,i)=> i ? ctx.lineTo(x(i), y(v)) : ctx.moveTo(x(i), y(v)));
   ctx.strokeStyle = cor; ctx.lineWidth = 2; ctx.stroke();
-})();
+}
+desenharPreco();
+document.addEventListener('tema-mudou', desenharPreco);
 </script>
 {% endif %}
 {% endblock %}

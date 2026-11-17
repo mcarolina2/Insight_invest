@@ -4,10 +4,25 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>{% block titulo %}Insight Invest{% endblock %}</title>
+<script>
+  // aplica o tema salvo antes de desenhar a página (evita piscar)
+  try { if (localStorage.getItem('tema') === 'claro') document.documentElement.dataset.tema = 'claro'; } catch (e) {}
+</script>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>📈</text></svg>">
 <style>
   :root{--bg:#0f1117;--surface:#181c27;--surface2:#1e2336;--border:#2a3050;--text:#e8eaf6;
-        --muted:#8b93a7;--accent:#6c63ff;--green:#22c55e;--amber:#f59e0b;--red:#ef4444}
+        --muted:#8b93a7;--accent:#6c63ff;--green:#22c55e;--amber:#f59e0b;--red:#ef4444;--blue:#3b82f6;
+        /* fundos suaves de destaque e cores dos gráficos */
+        --tint-green:#052e16;--tint-accent:#1e1b4b;--tint-amber:#1c1004;--tint-red:#1f0e0e;--tint-blue:#1e2336;
+        --grid:#1f2438;--axis:#2a3050;--curve:#e8eaf6;--dica-bg:#0b0d14;--hero:#1e1b4b;color-scheme:dark}
+  /* Tema claro (botão no topo; a escolha fica salva no navegador) */
+  :root[data-tema="claro"]{--bg:#f5f6fa;--surface:#ffffff;--surface2:#eef0f6;--border:#d8dce8;--text:#151a2d;
+        --muted:#5a6175;--accent:#5b52e0;--green:#15803d;--amber:#b45309;--red:#dc2626;--blue:#2563eb;
+        --tint-green:#e8f6ec;--tint-accent:#ecebff;--tint-amber:#fdf3e4;--tint-red:#fdecec;--tint-blue:#e8f0fe;
+        --grid:#e6e8f0;--axis:#c9cedd;--curve:#151a2d;--dica-bg:#ffffff;--hero:#ecebff;color-scheme:light}
+  .btn-tema{margin-left:16px;font-size:13px;padding:5px 12px;border-radius:20px;border:1px solid var(--border);
+            background:transparent;color:var(--muted);cursor:pointer;font-family:inherit}
+  .btn-tema:hover{color:var(--text);border-color:var(--accent)}
   *{box-sizing:border-box}
   body{margin:0;font-family:system-ui,-apple-system,'Segoe UI',sans-serif;background:var(--bg);color:var(--text);
        min-height:100vh;display:flex;flex-direction:column}
@@ -31,30 +46,77 @@
   .btn:disabled:hover{background:var(--accent)}
   .btn.secundario{background:transparent;border:1px solid var(--border);color:var(--text)}
   .msg{padding:10px 12px;border-radius:8px;font-size:13px;margin-bottom:16px;background:var(--surface2)}
-  .msg.erro{background:#1f0e0e;color:var(--red)}
+  .msg.erro{background:var(--tint-red);color:var(--red)}
   .muted{color:var(--muted);font-size:13px}
   .aviso-legal{font-size:11px;color:var(--muted);text-align:center;padding:16px 20px;border-top:1px solid var(--border)}
+  /* "Como ler": ícone (i) com explicação ao passar o mouse ou tocar */
+  .ajuda{position:relative;display:inline-flex;align-items:center;justify-content:center;width:15px;height:15px;
+         border-radius:50%;border:1px solid var(--muted);color:var(--muted);font-size:10px;font-weight:700;
+         font-style:normal;cursor:help;margin-left:5px;vertical-align:middle;text-transform:none;letter-spacing:0}
+  .ajuda:hover,.ajuda:focus{color:var(--text);border-color:var(--text);outline:none}
+  .ajuda .dica{display:none;position:absolute;z-index:50;left:50%;top:20px;transform:translateX(-50%);width:260px;
+         background:var(--dica-bg);border:1px solid var(--border);border-radius:8px;padding:10px 12px;font-size:12px;
+         font-weight:400;line-height:1.5;color:var(--text);text-align:left;box-shadow:0 8px 24px rgba(0,0,0,.25)}
+  .ajuda:hover .dica,.ajuda:focus .dica{display:block}
+  th .ajuda .dica{left:auto;right:-6px;transform:none}
+  .so-impressao{display:none}
+  /* Menu "Modelagem" (abre ao clicar; funciona sem JavaScript) */
+  .menu{position:relative;display:inline-block;margin-left:16px}
+  .menu summary{list-style:none;cursor:pointer;color:var(--muted);font-size:14px}
+  .menu summary::-webkit-details-marker{display:none}
+  .menu summary:after{content:" ▾";font-size:11px}
+  .menu[open] summary,.menu summary:hover{color:var(--text)}
+  .menu .itens{position:absolute;right:0;top:26px;z-index:60;min-width:200px;background:var(--surface);
+         border:1px solid var(--border);border-radius:10px;padding:6px;box-shadow:0 8px 24px rgba(0,0,0,.25)}
+  .menu .itens a{display:block;margin:0;padding:8px 10px;border-radius:6px;font-size:13px;color:var(--text)}
+  .menu .itens a:hover{background:var(--surface2)}
+  .menu .itens small{display:block;color:var(--muted);font-size:11px}
+  /* Caixas "Em resumo" e "Como ler" (nota técnica, desempenho e carteira) */
+  .resumo{background:var(--tint-accent);border-left:3px solid var(--accent);border-radius:0 8px 8px 0;
+          padding:10px 14px;font-size:13px;line-height:1.55;margin:8px 0 14px}
+  .como-ler{background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:10px 14px;
+          font-size:12.5px;line-height:1.55;margin:10px 0 0;color:var(--text)}
+  .resumo b:first-child,.como-ler b:first-child{color:var(--text)}
+  figure.fig{margin:16px 0}
+  figure.fig figcaption{font-size:12px;color:var(--muted);margin-top:6px}
+  figure.fig figcaption b{color:var(--text)}
   {% block estilo %}{% endblock %}
+
+  /* Impressão / "Salvar como PDF": fundo branco, sem menu nem botões */
+  @media print{
+    :root{--bg:#fff;--surface:#fff;--surface2:#f3f4f8;--border:#d5d8e3;--text:#111827;--muted:#4b5563}
+    body{background:#fff;color:#111827}
+    .topo,.nao-imprimir,.loading-overlay{display:none!important}
+    .so-impressao{display:block}
+    main{max-width:none;padding:0}
+    .card,.an-card,.an-box,.filtro-card,.mcard,.pie-card,.table-card,.fronteira-card{break-inside:avoid}
+    *{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+    a{color:inherit;text-decoration:none}
+    .ajuda{display:none}
+  }
 </style>
 </head>
 <body>
 <header class="topo">
-  <a class="marca" href="{% url 'core:home' %}">📈 Insight Invest</a>
+  <a class="marca" href="{% url 'core:home' %}">Insight Invest</a>
   <form action="{% url 'core:buscar_ativo' %}" method="get" class="busca-topo">
     <input type="text" name="q" placeholder="Buscar ativo (ex.: PETR4)" required>
   </form>
   <nav>
     {% if user.is_authenticated %}
       <a href="{% url 'scoring:carteira' %}">Minha carteira</a>
+      {% include "core/_menu_modelagem.html" %}
       <a href="{% url 'users:perfis' %}">Perfis</a>
       <a href="{% url 'users:perfil' %}">Meu perfil</a>
       <a href="{% url 'billing:upgrade' %}">Planos</a>
       <a href="{% url 'users:logout' %}">Sair</a>
     {% else %}
       <a href="{% url 'users:perfis' %}">Perfis</a>
+      {% include "core/_menu_modelagem.html" %}
       <a href="{% url 'users:login' %}">Entrar</a>
       <a href="{% url 'users:registro' %}">Criar conta</a>
     {% endif %}
+    <button type="button" class="btn-tema" id="btn-tema" aria-pressed="false">Tema claro</button>
   </nav>
 </header>
 <main>
@@ -66,6 +128,23 @@
   finalidade educacional; não constituem recomendação de investimento nos termos da Resolução CVM nº 20/2021.
   Rentabilidade passada não garante rentabilidade futura.
 </footer>
+<script>
+(function(){
+  const b = document.getElementById('btn-tema'), raiz = document.documentElement;
+  const rotulo = () => { const claro = raiz.dataset.tema === 'claro';
+    b.textContent = claro ? 'Tema escuro' : 'Tema claro'; b.setAttribute('aria-pressed', claro); };
+  b.onclick = () => {
+    if (raiz.dataset.tema === 'claro') delete raiz.dataset.tema; else raiz.dataset.tema = 'claro';
+    try { localStorage.setItem('tema', raiz.dataset.tema || 'escuro'); } catch (e) {}
+    rotulo();
+    document.dispatchEvent(new Event('tema-mudou'));   // páginas com gráficos em canvas redesenham
+  };
+  rotulo();
+  // fecha o menu "Modelagem" ao clicar fora dele
+  document.addEventListener('click', e => document.querySelectorAll('details.menu[open]').forEach(d => {
+    if (!d.contains(e.target)) d.removeAttribute('open'); }));
+})();
+</script>
 {% block script %}{% endblock %}
 </body>
 </html>

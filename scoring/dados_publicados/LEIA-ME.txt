@@ -1,0 +1,2 @@
+Arquivo gerado por: python manage.py backtest --publicar
+(backtest.json aparece aqui e alimenta a página Desempenho do modelo)

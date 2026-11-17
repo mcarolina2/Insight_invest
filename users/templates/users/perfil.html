@@ -11,7 +11,7 @@
 {% block conteudo %}
 <div class="card">
   <h1>{{ user.username }}</h1>
-  <p>Perfil de risco: <b>{{ perfil.get_tipo_display }}</b> ({{ perfil.pontuacao }} de 21 pontos)</p>
+  <p>Perfil de risco: <b>{{ perfil.get_tipo_display }}</b> ({{ perfil.pontuacao }} pontos no questionário)</p>
   <p class="muted">Atualizado em {{ perfil.atualizado_em|date:"d/m/Y H:i" }}</p>
   {% if user.assinatura %}<p>Plano: <b>{{ user.assinatura.plano }}</b></p>{% endif %}
   <a class="btn" href="{% url 'scoring:carteira' %}">Minha carteira</a>

@@ -23,17 +23,53 @@ def _top_recentes(model, campo_data, campo_valor,
           .filter(ativo__ativo=True)
           .order_by('ativo_id', f'-{campo_data}')
           .distinct('ativo_id'))
-    # Só ativos negociados: quem tem indicador estatístico tem cotação recente.
-    # (Evita no ranking empresas registradas na bolsa mas sem negócios, ex. PACA3.)
-    from market_data.models import KpiEstatistico
-    negociados = KpiEstatistico.objects.values('ativo_id')
-    if negociados.exists():
+    negociados = ativos_negociaveis()
+    if negociados is not None:
         qs = qs.filter(ativo_id__in=negociados)
     if filtro_extra:
         qs = qs.filter(**filtro_extra)
     registros = [r for r in qs if getattr(r, campo_valor) is not None]
     registros.sort(key=lambda r: getattr(r, campo_valor), reverse=reverso)
-    return registros[:limite]
+    # Uma linha por empresa (MTSA3 e MTSA4 são a mesma companhia).
+    vistas, saida = set(), []
+    for r in registros:
+        chave = ''.join(ch for ch in (r.ativo.cnpj or '') if ch.isdigit()) or r.ativo.ticker
+        if chave in vistas:
+            continue
+        vistas.add(chave)
+        saida.append(r)
+    return saida[:limite]
+
+
+def ativos_negociaveis():
+    """
+    IDs dos ativos com negociação suficiente para aparecer nos rankings, ou None
+    se ainda não houver indicador estatístico no banco (não filtra).
+
+    Usa o KpiEstatistico mais recente de cada ativo: ter o registro já indica
+    cotação recente; se ele trouxer a liquidez (volume_mediano), exige também o
+    mesmo mínimo da carteira (LIQUIDEZ_MINIMA_DIARIA e PREGOES_COM_NEGOCIO_MIN).
+    Assim ações quase sem negócios (ex.: MNPR3) não aparecem no topo da home.
+    """
+    from django.conf import settings
+    from market_data.models import KpiEstatistico
+    ultimos = (KpiEstatistico.objects
+               .order_by('ativo_id', '-data_calculo')
+               .distinct('ativo_id')
+               .values('ativo_id', 'volume_mediano', 'pregoes_com_negocio'))
+    ultimos = list(ultimos)
+    if not ultimos:
+        return None
+    minimo = float(getattr(settings, 'LIQUIDEZ_MINIMA_DIARIA', 0) or 0)
+    min_pregoes = float(getattr(settings, 'PREGOES_COM_NEGOCIO_MIN', 0) or 0)
+    ids = []
+    for u in ultimos:
+        vol, preg = u['volume_mediano'], u['pregoes_com_negocio']
+        if vol is not None and (float(vol) < minimo or
+                                (preg is not None and float(preg) < min_pregoes)):
+            continue
+        ids.append(u['ativo_id'])
+    return ids
 
 
 def _normalizar_dy(v):
@@ -216,21 +252,19 @@ def home_view(request):
         if len(ranking_dy) == 5:
             break
 
-    top_liq = _top_recentes(
-        KpiMicro, 'data_ref', 'liquidez_corrente',
-        filtro_extra={ "liquidez_corrente__gte": 1,
-                      "liquidez_corrente__lte": 5}, limite=5)
-    ranking_liq = []
-    for k in top_liq:
-        if float(k.liquidez_corrente) <= 20:
-            ranking_liq.append({
-                'posicao': len(ranking_liq)+1,
-                'ticker': k.ativo.ticker,
-                'setor': k.ativo.setor or '—',
-                'valor': round(float(k.liquidez_corrente), 2)
-            })
-        if len(ranking_liq) == 5:
-            break
+    # Maior ROE (antes: "maior liquidez corrente", que tinha teto de 5x e
+    # mostrava várias empresas empatadas em 4,9x). ROE acima de 100% costuma
+    # ser patrimônio líquido muito pequeno, não rentabilidade: fica de fora.
+    top_roe = _top_recentes(
+        KpiMicro, 'data_ref', 'roe',
+        filtro_extra={"roe__gt": 0, "roe__lte": 1,
+                      "divida_ebitda__lte": 3}, limite=5)
+    ranking_liq = [
+        {'posicao': i+1, 'ticker': k.ativo.ticker,
+         'setor': k.ativo.setor or '—',
+         'valor': round(float(k.roe) * 100, 1)}
+        for i, k in enumerate(top_roe)
+    ]
 
     top_div = _top_recentes(
         KpiMicro, 'data_ref', 'divida_ebitda',
@@ -373,3 +407,97 @@ def ativo_view(request, ticker):
         return redirect('core:ativo', ticker=ativo.ticker)
     perfil = perfil_do_usuario(request.user)
     return render(request, 'core/ativo.html', montar_contexto_ativo(ativo, perfil))
+
+
+# ─────────────────────────────────────────────────────────────
+# METODOLOGIA (página explicativa)
+# ─────────────────────────────────────────────────────────────
+
+_NOMES_FILTRO = {'liquidez_corrente': ('liquidez corrente', False), 'divida_ebitda': ('dívida/EBITDA', False),
+                 'roe': ('ROE', True)}
+
+
+def _texto_filtros(filtros: dict) -> str:
+    partes = []
+    for chave, v in filtros.items():
+        campo, op = chave.rsplit('__', 1)
+        nome, pct = _NOMES_FILTRO.get(campo, (campo, False))
+        valor = f"{v * 100:.0f}%" if pct else f"{v:.1f}".replace('.', ',')
+        partes.append(f"{nome} {'≥' if op == 'gte' else '≤'} {valor}")
+    return '; '.join(partes) or 'nenhum'
+
+
+def metodologia_view(request):
+    """Explica em linguagem simples como o escore e as carteiras são calculados.
+    Pesos e parâmetros vêm da configuração em uso (não ficam escritos à mão)."""
+    from django.conf import settings
+    from scoring.services.ahp import calcular_todos
+    from scoring.services.motor_scoring_v2 import obter_perfis
+    from scoring.services.renda_fixa import PERDA_MAX_POR_PERFIL
+
+    nomes = {'conservador': 'Conservador', 'intermediario': 'Intermediário', 'arrojado': 'Arrojado'}
+    try:
+        ahp = calcular_todos()
+    except Exception:
+        ahp = {}
+    perfis = []
+    for p, cfg in obter_perfis().items():
+        pc = cfg.get('pesos', {})
+        pm = cfg.get('micro_pesos', {})
+        a = ahp.get(p, {})
+        perda = PERDA_MAX_POR_PERFIL.get(p)
+        perfis.append({
+            'nome': nomes.get(p, p.title()),
+            'micro': round(pc.get('micro', 0) * 100), 'macro': round(pc.get('macro', 0) * 100),
+            'estat': round(pc.get('estat', 0) * 100),
+            'liquidez': round(pm.get('liquidez', 0) * 100),
+            'rentabilidade': round(pm.get('rentabilidade', 0) * 100),
+            'divida': round(pm.get('divida', 0) * 100),
+            'crescimento': round(pm.get('crescimento', 0) * 100),
+            'qtd': cfg.get('qtd_ativos'), 'max_pct': round(cfg.get('max_pct_ativo', 0) * 100),
+            'rc': max(a.get('rc_camadas', 0), a.get('rc_dimensoes', 0)) if a else None,
+            'perda': None if perda is None else round(perda * 100),
+            'filtros': _texto_filtros(cfg.get('filtros_kpi') or {}),
+        })
+    from scoring.services.carteira import MODELO_MAP, RETORNO_MAP, RISCO_MAP
+    nomes_modelo = {'risk_parity': 'Paridade de risco', 'markowitz': 'Markowitz (mínima variância)',
+                    'sharpe': 'Máximo Sharpe', 'score': 'Alocação por escore'}
+    rot_risco = {'baixo': 'Baixo (vol. ≤ 12%)', 'medio': 'Médio (vol. ≤ 20%)', 'alto': 'Alto (sem teto)'}
+    rot_ret = {k: f"{v * 100:.0f}% a.a." for k, v in RETORNO_MAP.items()}
+    matriz = [{'risco': rot_risco[r], 'celulas': [nomes_modelo[MODELO_MAP[(r, t)]] for t in ('baixo', 'medio', 'alto')]}
+              for r in ('baixo', 'medio', 'alto')]
+    from users.suitability import DIMENSOES, FAIXAS, PERGUNTAS
+    dimensoes = [{'nome': n, 'perguntas': [q['texto'] for q in PERGUNTAS if q['dimensao'] == k]}
+                 for k, n in DIMENSOES.items()]
+    return render(request, 'core/metodologia.html', {
+        'perfis': perfis,
+        'matriz': matriz, 'retornos_alvo': rot_ret,
+        'dimensoes': dimensoes, 'n_perguntas': len(PERGUNTAS),
+        'faixas': [(lim, nomes.get(n, n).lower()) for lim, n in FAIXAS],
+        'liquidez_min': settings.LIQUIDEZ_MINIMA_DIARIA / 1e6,
+        'pregoes_min': round(settings.PREGOES_COM_NEGOCIO_MIN * 100),
+    })
+
+
+# ─────────────────────────────────────────────────────────────
+# DESEMPENHO DO MODELO (backtest publicado)
+# ─────────────────────────────────────────────────────────────
+
+def desempenho_view(request):
+    """Resultados do backtest fora da amostra. O arquivo é gerado localmente por
+    `python manage.py backtest --publicar` e enviado ao servidor junto com o código."""
+    import json
+    from pathlib import Path
+    arq = Path(__file__).resolve().parent.parent / 'scoring' / 'dados_publicados' / 'backtest.json'
+    dados = None
+    if arq.exists():
+        try:
+            dados = json.loads(arq.read_text(encoding='utf-8'))
+        except (OSError, ValueError):
+            dados = None
+    return render(request, 'core/desempenho.html', {
+        'dados_json': json.dumps(dados, ensure_ascii=False) if dados else 'null',
+        'tem_dados': bool(dados),
+        'periodo': (dados or {}).get('periodo'),
+        'gerado_em': (dados or {}).get('gerado_em'),
+    })

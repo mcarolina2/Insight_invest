@@ -1,0 +1,173 @@
+{% extends "base.html" %}
+{% block titulo %}Desempenho do modelo — Insight Invest{% endblock %}
+{% block largura %}1100px{% endblock %}
+{% block estilo %}
+  .etiqueta{display:inline-block;font-size:11px;padding:2px 10px;border-radius:20px;background:var(--tint-green);color:var(--green);margin-bottom:8px}
+  .lead{color:var(--muted);font-size:14px;line-height:1.6;margin:0 0 10px}
+  .cartao{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:18px;margin-bottom:16px}
+  .cartao h2{font-size:17px;margin:0 0 6px}
+  .sub{font-size:12.5px;color:var(--muted);margin-bottom:12px}
+  .abas{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px}
+  .aba{font-size:12.5px;padding:6px 14px;border-radius:20px;border:1px solid var(--border);background:transparent;color:var(--muted);cursor:pointer;font-family:inherit}
+  .aba.sel{background:var(--tint-accent);color:var(--accent);border-color:var(--accent)}
+  .hipoteses{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+  @media(max-width:760px){.hipoteses{grid-template-columns:1fr}}
+  .hip{border:1px solid var(--border);border-radius:10px;padding:12px 14px;background:var(--surface2)}
+  .hip .t{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
+  .hip .v{font-size:16px;font-weight:700;margin:4px 0}
+  .hip .v.sim{color:var(--green)} .hip .v.nao{color:var(--amber)}
+  .hip p{font-size:12.5px;color:var(--muted);margin:0;line-height:1.5}
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  th{text-align:right;font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);padding:6px 8px;border-bottom:1px solid var(--border);font-weight:600}
+  th:first-child,td:first-child{text-align:left}
+  td{padding:7px 8px;border-bottom:1px solid var(--surface2);text-align:right;font-variant-numeric:tabular-nums}
+  tr.destaque td{font-weight:700}
+  .leg{display:flex;gap:14px;flex-wrap:wrap;font-size:12px;color:var(--muted);margin-top:6px}
+  .leg label{cursor:pointer} .leg i{display:inline-block;width:12px;height:3px;vertical-align:middle;margin:0 5px 0 2px}
+  svg{width:100%;height:auto;display:block}
+  .vazio{color:var(--muted);font-size:14px;line-height:1.6}
+  code{background:var(--surface2);padding:1px 6px;border-radius:4px;font-size:12.5px}
+{% endblock %}
+
+{% block conteudo %}
+<span class="etiqueta">Visão do modelo</span>
+<h1>Desempenho do modelo</h1>
+<p class="lead">Resultado do teste fora da amostra: a cada trimestre a carteira foi refeita só com a informação disponível naquela data,
+como descrito na <a href="{% url 'core:metodologia' %}#validacao">nota técnica</a>. Desempenho passado não garante resultado futuro.</p>
+
+{% if not tem_dados %}
+<div class="cartao"><p class="vazio">O resultado do teste ainda não foi publicado. Para publicar, rode no computador com a base completa
+<code>python manage.py backtest --publicar</code> e envie o arquivo <code>scoring/dados_publicados/backtest.json</code> junto com o código.</p></div>
+{% else %}
+<div class="cartao">
+  <h2>As três perguntas do teste</h2>
+  <div class="sub">Período de teste: {{ periodo.inicio }} a {{ periodo.fim }} · {{ periodo.rebalanceamentos }} rebalanceamentos trimestrais ·
+  custo de 0,10% · nível de significância de 5% · publicado em {{ gerado_em }}.</div>
+  <div class="hipoteses" id="hipoteses"></div>
+  <div class="como-ler"><b>Como ler:</b> "não confirmada" não quer dizer que a carteira foi pior; quer dizer que a diferença observada
+  poderia ter aparecido por acaso no período testado. Cinco anos de dados diários são pouco para separar diferenças de Sharpe de 0,1 a 0,2.</div>
+</div>
+
+<div class="cartao">
+  <h2>Retorno acumulado e comparação</h2>
+  <div class="abas" id="abas-perfil"></div>
+  <div class="abas" id="abas-custo"></div>
+  <div id="grafico"></div>
+  <div class="como-ler"><b>Como ler:</b> cada linha mostra quanto R$ 1 aplicado no início do teste teria virado ao longo do tempo, já
+  descontados os custos escolhidos. A linha cinza é a Selic: quando uma carteira de ações fica abaixo dela, a bolsa não compensou o risco.
+  Marque ou desmarque as carteiras na legenda.</div>
+  <div style="overflow-x:auto;margin-top:14px"><table id="tabela"></table></div>
+  <div class="como-ler"><b>Como ler:</b> <b>Sharpe</b> e <b>Sortino</b> medem retorno acima da Selic por unidade de risco (maior é melhor);
+  <b>maior queda</b> é a perda do pico ao fundo; <b>CVaR</b> é a perda média nos 5% piores dias; <b>giro</b> é quanto da carteira foi
+  trocado a cada trimestre; <b>p</b> é a chance de a diferença de Sharpe para a combinada ser acaso (abaixo de 0,05, significativa).</div>
+</div>
+
+<div class="cartao">
+  <h2>Em reais</h2>
+  <div class="sub">Quanto teriam virado R$ 10 mil aplicados no início do teste, e R$ 10 mil iniciais mais R$ 10 mil por ano (custo de 0,10%).</div>
+  <div style="overflow-x:auto"><table id="patrimonio"></table></div>
+  <div class="como-ler"><b>Como ler:</b> diferenças que parecem pequenas em porcentagem ao ano viram valores relevantes com o tempo e com
+  aportes. Ainda assim, valem as mesmas ressalvas estatísticas da tabela acima.</div>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block script %}
+<script>
+const D = {{ dados_json|safe }};
+if (D) (function(){
+  const NOMES_PERFIL = {conservador:'Conservador', intermediario:'Intermediário', arrojado:'Arrojado'};
+  const CORES = {combinada:'#6c63ff', fundamentalista:'#3b82f6', estatistica:'#14b8a6', igual:'#22c55e', ibovespa:'#f59e0b', selic:'#64748b'};
+  const fmtP = (v, c=1) => v == null ? '—' : (v*100).toFixed(c).replace('.', ',') + '%';
+  const fmtN = (v, c=2) => v == null ? '—' : Number(v).toFixed(c).replace('.', ',');
+  const reais = v => 'R$ ' + Math.round(v).toLocaleString('pt-BR');
+  const esc = s => String(s ?? '').replace(/[&<>"]/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[ch]));
+  const perfis = Object.keys(D.perfis);
+  let perfil = perfis.includes('intermediario') ? 'intermediario' : perfis[0];
+  let custo = 0.001;
+  const visivel = {};
+
+  // Hipóteses
+  const h = D.hipoteses || {};
+  const ROT = {true: ['sim', 'Confirmada'], false: ['nao', 'Não confirmada'], parte: ['', 'Em parte'], null: ['', 'Sem dados']};
+  const geral = chave => {
+    const vs = perfis.map(p => (h[p] || {})[chave]).filter(v => v != null);
+    if (!vs.length) return null;
+    return vs.every(v => v) ? true : vs.every(v => !v) ? false : 'parte';
+  };
+  const porPerfil = chave => perfis.map(p => {
+    const v = (h[p] || {})[chave];
+    return `${NOMES_PERFIL[p]}: ${v == null ? 'sem dados' : v ? 'sim' : 'não'}`;
+  }).join(' · ');
+  const h3 = h.H3 ? (h.H3.volatilidade_crescente && h.H3.drawdown_crescente) : null;
+  const cards = [
+    ['H1', 'A combinação das camadas rende mais, por unidade de risco, do que cada camada sozinha?', geral('H1'), porPerfil('H1')],
+    ['H2', 'A carteira combinada supera as referências simples (1/N e Ibovespa)?', geral('H2'), porPerfil('H2')],
+    ['H3', 'O risco cresce do perfil conservador para o arrojado?', h3, 'volatilidade e maior queda da carteira combinada'],
+  ];
+  document.getElementById('hipoteses').innerHTML = cards.map(([id, perg, v, det]) => {
+    const [cls, txt] = ROT[v];
+    return `<div class="hip"><div class="t">${id}</div><div class="v ${cls}">${txt}</div><p>${esc(perg)}<br>${esc(det)}</p></div>`;
+  }).join('');
+
+  function abas(){
+    document.getElementById('abas-perfil').innerHTML = perfis.map(p =>
+      `<button class="aba ${p === perfil ? 'sel' : ''}" data-p="${p}">${NOMES_PERFIL[p] || p}</button>`).join('');
+    document.getElementById('abas-custo').innerHTML = [0, 0.001, 0.003].map(c =>
+      `<button class="aba ${c === custo ? 'sel' : ''}" data-c="${c}">custo ${fmtP(c, c ? 2 : 0)}</button>`).join('');
+    document.querySelectorAll('#abas-perfil .aba').forEach(b => b.onclick = () => { perfil = b.dataset.p; render(); });
+    document.querySelectorAll('#abas-custo .aba').forEach(b => b.onclick = () => { custo = +b.dataset.c; render(); });
+  }
+
+  function grafico(){
+    const s = D.perfis[perfil].serie, n = s.datas.length, W = 900, H = 300, P = {t:12, r:14, b:30, l:48};
+    const ests = Object.keys(s).filter(k => k !== 'datas');
+    ests.forEach(e => { if (!(e in visivel)) visivel[e] = true; });
+    const vis = ests.filter(e => visivel[e]);
+    const vals = vis.flatMap(e => s[e]).filter(v => v != null);
+    const y0 = Math.min(0, ...vals), y1 = Math.max(0.01, ...vals);
+    const fx = i => P.l + i / Math.max(n - 1, 1) * (W - P.l - P.r);
+    const fy = v => H - P.b - (v - y0) / ((y1 - y0) || 1) * (H - P.t - P.b);
+    const passo = (y1 - y0) > 1 ? 0.25 : 0.1;
+    let g = '';
+    for (let v = Math.ceil(y0 / passo) * passo; v <= y1 + 1e-9; v += passo)
+      g += `<line x1="${P.l}" x2="${W-P.r}" y1="${fy(v)}" y2="${fy(v)}" stroke="${Math.abs(v) < 1e-9 ? 'var(--axis)' : 'var(--grid)'}"/>
+            <text x="${P.l-6}" y="${fy(v)+3}" font-size="10" fill="var(--muted)" text-anchor="end">${Math.round(v*100)}%</text>`;
+    vis.forEach(e => g += `<polyline fill="none" stroke="${CORES[e] || '#999'}" stroke-width="${e === 'combinada' ? 2.4 : 1.4}"
+        ${e === 'selic' ? 'stroke-dasharray="5 4"' : ''} points="${s[e].map((v, i) => fx(i) + ',' + fy(v)).join(' ')}"/>`);
+    [0, Math.floor((n-1)/2), n-1].forEach(i => {
+      const [a, m] = s.datas[i].split('-');
+      g += `<text x="${fx(i)}" y="${H-10}" font-size="10" fill="var(--muted)" text-anchor="${i === 0 ? 'start' : i === n-1 ? 'end' : 'middle'}">${m}/${a}</text>`;
+    });
+    const leg = ests.map(e => `<label><input type="checkbox" data-e="${e}" ${visivel[e] ? 'checked' : ''}><i style="background:${CORES[e] || '#999'}"></i>${esc(D.nomes[e] || e)}</label>`).join('');
+    document.getElementById('grafico').innerHTML = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Retorno acumulado no teste">${g}</svg><div class="leg">${leg}</div>
+      <div class="sub" style="margin-top:6px">O gráfico usa custo de 0,10%; a tabela abaixo segue o custo escolhido.</div>`;
+    document.querySelectorAll('#grafico input').forEach(cb => cb.onchange = () => { visivel[cb.dataset.e] = cb.checked; grafico(); });
+  }
+
+  function tabela(){
+    const P = D.perfis[perfil];
+    const ms = P.metricas.filter(m => Math.abs(m.custo - custo) < 1e-9);
+    const pv = {};
+    (P.testes || []).filter(t => Math.abs(t.custo - custo) < 1e-9).forEach(t => pv[t.contra] = t.p_valor);
+    document.getElementById('tabela').innerHTML =
+      `<tr><th>Carteira</th><th>Retorno a.a.</th><th>Volatilidade</th><th>Sharpe</th><th>Sortino</th><th>Maior queda</th><th>CVaR 95%</th><th>Giro</th><th>p</th></tr>` +
+      ms.map(m => `<tr class="${m.carteira === 'combinada' ? 'destaque' : ''}"><td><i style="display:inline-block;width:10px;height:3px;background:${CORES[m.carteira]};margin-right:6px;vertical-align:middle"></i>${esc(D.nomes[m.carteira] || m.carteira)}</td>
+        <td>${fmtP(m.retorno_anual)}</td><td>${fmtP(m.volatilidade)}</td><td>${fmtN(m.sharpe)}</td><td>${fmtN(m.sortino)}</td>
+        <td>${fmtP(m.max_drawdown)}</td><td>${fmtP(m.cvar95, 2)}</td><td>${fmtP(m.turnover_medio)}</td><td>${pv[m.carteira] != null ? fmtN(pv[m.carteira], 3) : '—'}</td></tr>`).join('');
+  }
+
+  function patrimonio(){
+    const ls = (D.patrimonio || []).filter(x => x.perfil === perfil);
+    if (!ls.length){ document.getElementById('patrimonio').innerHTML = '<tr><td>Sem dados.</td></tr>'; return; }
+    document.getElementById('patrimonio').innerHTML =
+      `<tr><th>Carteira</th><th>R$ 10 mil iniciais</th><th>Com R$ 10 mil/ano (aplicado ${reais(ls[0].aplicado_com_aportes)})</th></tr>` +
+      ls.map(x => `<tr class="${x.carteira === 'combinada' ? 'destaque' : ''}"><td>${esc(D.nomes[x.carteira] || x.carteira)}</td>
+        <td>${reais(x.final_10mil)}</td><td>${reais(x.final_com_aportes)}</td></tr>`).join('');
+  }
+
+  function render(){ abas(); grafico(); tabela(); patrimonio(); }
+  render();
+})();
+</script>
+{% endblock %}

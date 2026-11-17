@@ -3,7 +3,7 @@
 {% block largura %}1140px{% endblock %}
 {% block estilo %}
   /* HOME — mesma paleta do base.html (variáveis --bg, --surface, --accent...) */
-  .hero{background:linear-gradient(135deg,#1e1b4b 0%,var(--surface) 70%);border:1px solid var(--border);
+  .hero{background:linear-gradient(135deg,var(--hero) 0%,var(--surface) 70%);border:1px solid var(--border);
         border-radius:14px;padding:32px 24px;text-align:center;margin-bottom:14px}
   .hero h1{font-size:22px;font-weight:600;margin:0 0 6px}
   .hero p{color:var(--muted);font-size:14px;margin:0 0 18px}
@@ -18,8 +18,13 @@
 
   .secao{font-size:16px;font-weight:600;margin:28px 0 12px}
   .grade{display:grid;gap:12px}
-  .g4{grid-template-columns:repeat(4,1fr)} .g3{grid-template-columns:repeat(3,1fr)} .g2{grid-template-columns:1.1fr 1fr}
-  @media(max-width:900px){.g4{grid-template-columns:repeat(2,1fr)}}
+  /* minmax(0,1fr) + min-width:0: sem isso, nomes de setor longos (nowrap)
+     alargavam as colunas e os rankings passavam da largura da página,
+     desalinhando-os das carteiras abaixo. */
+  .grade>*{min-width:0}
+  .g4{grid-template-columns:repeat(4,minmax(0,1fr))} .g3{grid-template-columns:repeat(3,minmax(0,1fr))}
+  .g2{grid-template-columns:minmax(0,1.1fr) minmax(0,1fr)}
+  @media(max-width:1000px){.g4{grid-template-columns:repeat(2,minmax(0,1fr))}}
   @media(max-width:760px){.g4,.g3,.g2{grid-template-columns:1fr}}
   .grade .card{margin:0;padding:16px 18px}
   .titulo-card{font-size:13px;font-weight:600;margin-bottom:10px;color:var(--text)}
@@ -62,9 +67,9 @@
   .noticia{display:flex;align-items:flex-start;gap:9px;padding:9px 0;border-bottom:1px solid var(--surface2)}
   .noticia:last-child{border-bottom:none}
   .badge{font-size:10px;font-weight:600;padding:2px 8px;border-radius:20px;flex-shrink:0;margin-top:2px}
-  .badge-positivo{background:#052e1a;color:var(--green)}
-  .badge-negativo{background:#2a0f0f;color:var(--red)}
-  .badge-neutro{background:#2a1f05;color:var(--amber)}
+  .badge-positivo{background:var(--tint-green);color:var(--green)}
+  .badge-negativo{background:var(--tint-red);color:var(--red)}
+  .badge-neutro{background:var(--tint-amber);color:var(--amber)}
   .noticia-texto{font-size:13px;line-height:1.45}
   .macro-tab{width:100%;font-size:13px;border-collapse:collapse}
   .macro-tab td{padding:6px 0;border-bottom:1px solid var(--surface2)}
@@ -96,14 +101,15 @@
 </div>
 {% endif %}
 
-<div class="secao">📊 Rankings de ativos</div>
+<div class="secao">Rankings de ativos</div>
+<p class="vazio" style="margin:-6px 0 12px">Uma ação por empresa e só ações com negociação suficiente (a mesma regra de liquidez das carteiras).</p>
 <div class="grade g4">
   <div class="card">
     <div class="titulo-card">Maior escore</div>
     {% for r in ranking_score %}
     <a class="rank" href="{% url 'core:ativo' r.ticker %}">
       <span class="rank-pos">{{ r.posicao }}</span><span class="rank-ticker">{{ r.ticker }}</span>
-      <span class="rank-setor">{{ r.setor }}</span><span class="rank-valor">{{ r.valor|floatformat:0 }}</span>
+      <span class="rank-setor" title="{{ r.setor }}">{{ r.setor }}</span><span class="rank-valor">{{ r.valor|floatformat:0 }}</span>
     </a>
     {% empty %}<p class="vazio">Sem dados.</p>{% endfor %}
   </div>
@@ -112,36 +118,35 @@
     {% for r in ranking_dy %}
     <a class="rank" href="{% url 'core:ativo' r.ticker %}">
       <span class="rank-pos">{{ r.posicao }}</span><span class="rank-ticker">{{ r.ticker }}</span>
-      <span class="rank-setor">{{ r.setor }}</span><span class="rank-valor">{{ r.valor }}%</span>
+      <span class="rank-setor" title="{{ r.setor }}">{{ r.setor }}</span><span class="rank-valor">{{ r.valor }}%</span>
     </a>
     {% empty %}<p class="vazio">Sem dados.</p>{% endfor %}
   </div>
   <div class="card">
-    <div class="titulo-card">Maior liquidez corrente</div>
+    <div class="titulo-card" title="Lucro líquido ÷ patrimônio líquido, entre empresas com dívida líquida/EBITDA até 3x">Maior ROE</div>
     {% for r in ranking_liquidez %}
     <a class="rank" href="{% url 'core:ativo' r.ticker %}">
       <span class="rank-pos">{{ r.posicao }}</span><span class="rank-ticker">{{ r.ticker }}</span>
-      <span class="rank-setor">{{ r.setor }}</span><span class="rank-valor azul">{{ r.valor }}x</span>
+      <span class="rank-setor" title="{{ r.setor }}">{{ r.setor }}</span><span class="rank-valor azul">{{ r.valor|floatformat:1 }}%</span>
     </a>
     {% empty %}<p class="vazio">Sem dados.</p>{% endfor %}
   </div>
   <div class="card">
-    <div class="titulo-card">Menor endividamento</div>
+    <div class="titulo-card" title="Dívida líquida ÷ EBITDA: quantos anos de geração de caixa pagariam a dívida">Menor endividamento</div>
     {% for r in ranking_divida %}
     <a class="rank" href="{% url 'core:ativo' r.ticker %}">
       <span class="rank-pos">{{ r.posicao }}</span><span class="rank-ticker">{{ r.ticker }}</span>
-      <span class="rank-setor">{{ r.setor }}</span><span class="rank-valor laranja">{{ r.valor }}x</span>
+      <span class="rank-setor" title="{{ r.setor }}">{{ r.setor }}</span><span class="rank-valor laranja">{{ r.valor|floatformat:2 }}x</span>
     </a>
     {% empty %}<p class="vazio">Sem dados.</p>{% endfor %}
   </div>
 </div>
 
-<div class="secao">💼 Carteiras de referência por perfil</div>
+<div class="secao">Carteiras de referência por perfil</div>
 <div class="grade g3">
   {% for c in carteiras_coringa %}
   <div class="perfil-card" style="--cor:{{ c.cor }}">
     <div class="perfil-topo">
-      <span class="perfil-icone">{{ c.icone }}</span>
       <div>
         <div class="perfil-titulo">{{ c.titulo }}</div>
         <div class="perfil-sub">Carteira teórica de exemplo{% if c.data_calculo %} · {{ c.data_calculo|slice:"8:10" }}/{{ c.data_calculo|slice:"5:7" }}/{{ c.data_calculo|slice:":4" }}{% endif %}</div>
@@ -166,7 +171,7 @@
       </div>
       {% endfor %}
       {% if c.qtd_total > 4 %}
-      <div class="mais">🔒 +{{ c.qtd_total|add:"-4" }} itens disponíveis após o cadastro.</div>
+      <div class="mais">+{{ c.qtd_total|add:"-4" }} itens disponíveis após o cadastro.</div>
       {% endif %}
     {% endif %}
 
@@ -179,7 +184,7 @@
 
 <div class="grade g2" style="margin-top:24px">
   <div class="card">
-    <div class="titulo-card">📰 Notícias e sentimento de mercado</div>
+    <div class="titulo-card">Notícias e sentimento de mercado</div>
     {% for n in noticias %}
     <div class="noticia">
       <span class="badge badge-{{ n.sentimento_label }}">{{ n.sentimento_label }}</span>
@@ -188,7 +193,7 @@
     {% empty %}<p class="vazio">Nenhuma notícia coletada ainda.</p>{% endfor %}
   </div>
   <div class="card">
-    <div class="titulo-card">🏦 Radar macroeconômico</div>
+    <div class="titulo-card">Radar macroeconômico</div>
     {% if macro %}
     <table class="macro-tab">
       {% if macro.selic is not None %}<tr><td>Selic (meta)</td><td>{{ macro.selic|floatformat:2 }}% a.a.</td></tr>{% endif %}

@@ -11,18 +11,20 @@ from users.views import perfil_obrigatorio
 logger = logging.getLogger(__name__)
 
 OPCOES = {"baixo", "medio", "alto"}
-MAX_SETORES_FILTRO = 8
 
 
 def _setores_disponiveis(df_scores, perfil):
-    """Setores com pelo menos 2 ativos elegíveis (mínimo para otimizar)."""
+    """Todos os setores com ativo elegível, em ordem alfabética, com a contagem.
+    Como dá para escolher vários setores juntos, setor com 1 ativo também entra."""
     from scoring.services.motor_scoring_v2 import config_perfil
     if df_scores.empty:
         return []
     elegiveis = df_scores[(df_scores["score_final"] >= config_perfil(perfil)["score_min"])
                           & (df_scores["setor"] != "")]
+    if "empresa" in elegiveis.columns:          # conta empresas, não tickers
+        elegiveis = elegiveis.drop_duplicates("empresa")
     contagem = elegiveis["setor"].value_counts()
-    return contagem[contagem >= 2].index[:MAX_SETORES_FILTRO].tolist()
+    return [{"nome": n, "qtd": int(q)} for n, q in sorted(contagem.items(), key=lambda x: x[0].lower())]
 
 
 @perfil_obrigatorio
@@ -39,15 +41,25 @@ def carteira_view(request):
         "setores": _setores_disponiveis(df, perfil),
         "qtd_ativos": cfg["qtd_ativos"],
         "max_pct": int(cfg["max_pct_ativo"] * 100),
+        "qtd_opcoes": list(range(QTD_MIN, QTD_MAX + 1)),
+        "horizontes": HORIZONTES,
+        "horizonte_padrao": HORIZONTE_PADRAO,
         "macro": __import__("scoring.services.macro", fromlist=["x"]).macro_consolidado(),
     })
+
+
+QTD_MIN, QTD_MAX = 3, 20
+HORIZONTES = (1, 2, 3, 5)
+HORIZONTE_PADRAO = 3
 
 
 @perfil_obrigatorio
 @require_POST
 def otimizar_ajax(request):
     """
-    POST JSON: {"risco": "baixo|medio|alto", "retorno": "baixo|medio|alto", "setor": "todos|<setor>"}
+    POST JSON: {"risco": "baixo|medio|alto", "retorno": "baixo|medio|alto",
+                "setores": [<setor>, ...] (vazio = todos; aceita também "setor": "<setor>"),
+                "qtd_ativos": 3-20 (opcional), "horizonte": 1|2|3|5 anos de simulação}
 
     Resposta: {
       "alocacao": [{"ticker", "pct", "score", "score_micro", "score_estat", "setor"}, ...],
@@ -68,9 +80,30 @@ def otimizar_ajax(request):
 
     risco = body.get("risco", "medio")
     retorno = body.get("retorno", "medio")
-    setor = body.get("setor") or "todos"
     if risco not in OPCOES or retorno not in OPCOES:
         return JsonResponse({"erro": "Filtro de risco/retorno inválido."}, status=400)
+
+    # Setores: lista (vários) ou o campo antigo "setor" (um só); vazio/"todos" = todos.
+    setores = body.get("setores")
+    if setores is None:
+        setores = [body.get("setor")] if body.get("setor") not in (None, "", "todos") else []
+    if not isinstance(setores, list) or not all(isinstance(x, str) for x in setores):
+        return JsonResponse({"erro": "Filtro de setor inválido."}, status=400)
+    setores = [x for x in setores if x and x != "todos"][:30]
+
+    # Número máximo de ações (padrão do perfil) e período da simulação (anos).
+    try:
+        qtd_ativos = int(body["qtd_ativos"]) if body.get("qtd_ativos") not in (None, "") else None
+    except (TypeError, ValueError):
+        return JsonResponse({"erro": "Número de ações inválido."}, status=400)
+    if qtd_ativos is not None and not QTD_MIN <= qtd_ativos <= QTD_MAX:
+        return JsonResponse({"erro": f"Escolha entre {QTD_MIN} e {QTD_MAX} ações."}, status=400)
+    try:
+        horizonte = int(body.get("horizonte") or HORIZONTE_PADRAO)
+    except (TypeError, ValueError):
+        horizonte = 0
+    if horizonte not in HORIZONTES:
+        return JsonResponse({"erro": "Período inválido."}, status=400)
 
     perfil = perfil_do_usuario(request.user)
     params = parametros_dos_filtros(risco, retorno)
@@ -78,7 +111,7 @@ def otimizar_ajax(request):
     try:
         df = calcular_scores_v2(perfil)
         res = montar_carteira_otimizada(
-            df, perfil, setor_filtro=None if setor == "todos" else setor, **params)
+            df, perfil, setor_filtro=setores or None, qtd_ativos=qtd_ativos, **params)
     except CarteiraVazia as e:
         return JsonResponse({"erro": str(e)}, status=422)
     except Exception:
@@ -110,8 +143,9 @@ def otimizar_ajax(request):
     from scoring.services.analise_carteira import analisar_carteira
     try:
         pesos_acoes = {a["ticker"]: a["pct"] / 100 for a in alocacao if a["tipo"] == "acao"}
-        analise = analisar_carteira(res.get("precos"), pesos_acoes,
-                                    completa["pct_renda_fixa"], rf, sp)
+        precos_an, ibov = _precos_para_analise(res.get("precos"), list(pesos_acoes), horizonte)
+        analise = analisar_carteira(precos_an, pesos_acoes, completa["pct_renda_fixa"], rf, sp,
+                                    ibovespa=ibov, horizonte_anos=horizonte)
     except Exception:
         logger.exception("Erro na análise estatística/macro da carteira")
         msg = "Não foi possível gerar esta análise agora."
@@ -131,4 +165,27 @@ def otimizar_ajax(request):
         "modelo": res["modelo_usado"],
         "aviso": res["aviso"],
         "fronteira": res["fronteira"],
+        "qtd_ativos": res.get("qtd_ativos"),
+        "max_pct": res.get("max_pct"),
+        "horizonte": horizonte,
     })
+
+
+def _precos_para_analise(precos, tickers: list, horizonte: int):
+    """
+    Preços e Ibovespa para a análise da carteira no período escolhido.
+    A carteira é sempre estimada com 3 anos (metodologia); só a SIMULAÇÃO usa o
+    período escolhido. Para 5 anos é preciso baixar um histórico mais longo.
+    """
+    from scoring.services.precos import obter_ibovespa, obter_precos
+    anos = max(HORIZONTE_PADRAO, horizonte)
+    if anos > HORIZONTE_PADRAO and tickers:
+        longos = obter_precos(tickers, anos=anos)
+        if longos is not None and not longos.empty:
+            precos = longos
+    try:
+        ibov = obter_ibovespa(anos=anos)
+    except Exception:
+        logger.warning("Ibovespa indisponível para a comparação da carteira")
+        ibov = None
+    return precos, ibov

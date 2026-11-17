@@ -5,7 +5,7 @@
 <div class="card">
   <h1>Criar conta</h1>
   {% if perfil_sugerido %}<div class="msg">Você escolheu a carteira <b>{{ perfil_sugerido|title }}</b>. Crie sua conta e responda o questionário para confirmar seu perfil.</div>{% endif %}
-  <p class="muted">Depois do cadastro, você responde um questionário rápido (7 perguntas) para definirmos seu perfil de risco.</p>
+  <p class="muted">Depois do cadastro, você responde um questionário rápido (8 perguntas) para definirmos seu perfil de risco.</p>
   <form method="post">
     {% csrf_token %}
     {% for campo in form %}

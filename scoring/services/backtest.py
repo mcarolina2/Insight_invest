@@ -57,7 +57,12 @@ ESTRATEGIAS = {
     "estatistica": "Só estatística",
     "igual": "1/N (candidatos da combinada)",
     "ibovespa": "Ibovespa",
+    "selic": "Selic (renda fixa)",
 }
+
+# Estratégias que não são carteiras de ações: entram na tabela como
+# referência, mas não no teste de Sharpe nem no turnover.
+REFERENCIAS = ("ibovespa", "selic")
 
 
 # ─────────────────────────────────────────────────────────────────────
@@ -94,6 +99,8 @@ def estatisticas_janela(precos: pd.DataFrame, mercado: pd.Series | None = None,
         "curtose": K,
         "retorno_normal": p_jb > 0.05,
         "cv": (dp / media.replace(0, np.nan)).abs(),
+        "media_retorno": media,
+        "dp_retorno": dp,
     }).astype({"retorno_normal": bool})
 
 
@@ -341,6 +348,10 @@ def executar_backtest(precos: pd.DataFrame, perfis=("conservador", "intermediari
         if ibovespa is not None and not ibovespa.empty:
             r_ibov = ibovespa.pct_change(fill_method=None).fillna(0).iloc[inicio_sim:]
             traj["ibovespa"] = Trajetoria(r_ibov, pd.Series(0.0, index=r_ibov.index))
+        # Selic: o que teria rendido a renda fixa no mesmo período (referência
+        # para "a bolsa compensou o risco?"; Sharpe nulo por construção).
+        r_selic = rf_d.iloc[inicio_sim:]
+        traj["selic"] = Trajetoria(r_selic, pd.Series(0.0, index=r_selic.index))
 
         res_perfil = {"metricas": {}, "testes": {}, "series": {},
                       "carteiras": {e: {datas[k].date().isoformat(): {t: round(float(w), 4) for t, w in pesos.items()}
@@ -351,13 +362,32 @@ def executar_backtest(precos: pd.DataFrame, perfis=("conservador", "intermediari
         for c in custos:
             chave = f"{c:.4f}"
             res_perfil["metricas"][chave] = {
-                e: metricas(tj.liquido(c), rf_d, tj.turnovers if e != "ibovespa" else None)
+                e: metricas(tj.liquido(c), rf_d, tj.turnovers if e not in REFERENCIAS else None)
                 for e, tj in traj.items()}
             res_perfil["series"][chave] = {e: tj.liquido(c) for e, tj in traj.items()}
             if "combinada" in traj:
                 ex = {e: tj.liquido(c) - rf_d.reindex(tj.bruto.index) for e, tj in traj.items()}
                 res_perfil["testes"][chave] = {
                     e: teste_sharpe_ledoit_wolf(ex["combinada"], ex[e], reamostragens=reamostragens)
-                    for e in ex if e != "combinada"}
+                    for e in ex if e not in ("combinada", "selic")}
         saida["perfis"][perfil] = res_perfil
     return saida
+
+
+def patrimonio(r: pd.Series, inicial: float = 10_000.0, aporte: float = 0.0,
+               pregoes_entre_aportes: int = 252) -> dict:
+    """
+    Valor final de um investimento que segue os retornos diários `r`.
+    inicial: valor aplicado no primeiro dia; aporte: valor somado a cada
+    `pregoes_entre_aportes` pregões (252 = uma vez por ano). Retorna o valor
+    final, o total aplicado e o ganho.
+    """
+    r = r.dropna()
+    valor, aplicado = float(inicial), float(inicial)
+    for k, rk in enumerate(r.values):
+        if aporte and k > 0 and k % pregoes_entre_aportes == 0:
+            valor += aporte
+            aplicado += aporte
+        valor *= 1 + float(rk)
+    return {"valor_final": round(valor, 2), "aplicado": round(aplicado, 2),
+            "ganho": round(valor - aplicado, 2)}

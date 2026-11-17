@@ -1,0 +1,339 @@
+{% extends "base.html" %}
+{% block titulo %}Nota técnica — Insight Invest{% endblock %}
+{% block largura %}1140px{% endblock %}
+{% block estilo %}
+  .nota{display:grid;grid-template-columns:220px minmax(0,1fr);gap:36px;align-items:start}
+  @media(max-width:860px){.nota{grid-template-columns:1fr}.nota aside{position:static!important}}
+  .nota aside{position:sticky;top:16px;font-size:13px;background:var(--surface);border:1px solid var(--border);
+              border-radius:12px;padding:14px 12px}
+  .nota aside .tit{font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin:0 6px 8px}
+  .nota aside a{display:block;padding:5px 8px;border-radius:6px;color:var(--muted);text-decoration:none}
+  .nota aside a:hover,.nota aside a.ativo{background:var(--surface2);color:var(--text)}
+  .met .etiqueta{display:inline-block;font-size:11px;padding:2px 10px;border-radius:20px;background:var(--tint-green);
+                 color:var(--green);margin-bottom:8px}
+  .met h1{margin-bottom:6px}
+  .met .lead{color:var(--muted);font-size:14px;line-height:1.6;margin:0 0 6px}
+  .met section{padding-top:8px;margin-bottom:26px;scroll-margin-top:12px}
+  .met h2{font-size:19px;margin:22px 0 6px;padding-top:14px;border-top:1px solid var(--border)}
+  .met h3{font-size:15px;margin:18px 0 6px}
+  .met p,.met li{font-size:14px;line-height:1.65}
+  .met ul{padding-left:20px;margin:6px 0}
+  .met .citacao{border-left:3px solid var(--accent);padding:6px 14px;font-style:italic;color:var(--text);margin:12px 0}
+  .met .formula{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:10px 14px;
+                font-family:ui-monospace,Consolas,monospace;font-size:13px;margin:10px 0;overflow-x:auto}
+  .met table{width:100%;border-collapse:collapse;font-size:13px;margin:10px 0}
+  .met th{text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);
+          padding:6px 8px;border-bottom:1px solid var(--border)}
+  .met td{padding:7px 8px;border-bottom:1px solid var(--surface2)}
+  .met .num{text-align:right;font-variant-numeric:tabular-nums}
+  /* fluxograma da Figura 1 */
+  .fluxo{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;align-items:stretch}
+  @media(max-width:700px){.fluxo{grid-template-columns:1fr 1fr}}
+  .caixa{border:1px solid var(--border);border-radius:8px;padding:8px 10px;font-size:12.5px;background:var(--surface);line-height:1.4}
+  .caixa b{display:block;font-size:12.5px}
+  .caixa.dado{border-color:var(--blue)} .caixa.calc{border-color:var(--accent)} .caixa.saida{border-color:var(--green)}
+  .seta{text-align:center;color:var(--muted);font-size:12px;margin:4px 0}
+  /* barras de pesos (Figura 3) */
+  .barra-pesos{display:flex;height:22px;border-radius:6px;overflow:hidden;font-size:11px;color:#fff;font-weight:600}
+  .barra-pesos div{display:flex;align-items:center;justify-content:center;white-space:nowrap}
+  .linha-pesos{display:grid;grid-template-columns:110px 1fr;gap:10px;align-items:center;margin:6px 0;font-size:13px}
+  /* linha do tempo da validação (Figura 4) */
+  .tempo{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:3px;font-size:10px;text-align:center}
+  .tempo div{padding:6px 2px;border-radius:4px;background:var(--surface2);color:var(--muted)}
+  .tempo .cal{background:var(--tint-accent);color:var(--accent)} .tempo .tst{background:var(--tint-amber);color:var(--amber);font-weight:600}
+  .tempo-rot{font-size:12px;color:var(--muted);margin:10px 0 4px}
+{% endblock %}
+
+{% block conteudo %}
+<div class="nota">
+<aside>
+  <div class="tit">Documentação</div>
+  <a href="#introducao">Introdução</a>
+  <a href="#fontes">Fontes de dados</a>
+  <a href="#perfil">Perfil do investidor</a>
+  <a href="#escore">Como o escore é calculado</a>
+  <a href="#pesos">Pesos dos critérios</a>
+  <a href="#selecao">Quais ações entram</a>
+  <a href="#alocacao">Quanto em cada ação</a>
+  <a href="#renda-fixa">Renda fixa e ações</a>
+  <a href="#validacao">Desenho da validação</a>
+  <a href="#uso">Uso e interpretação</a>
+  <a href="#limites">Limitações e transparência</a>
+  <a href="#glossario">Glossário</a>
+  <div class="tit" style="margin-top:12px">Veja também</div>
+  <a href="{% url 'core:desempenho' %}">Desempenho do modelo</a>
+</aside>
+
+<article class="met">
+<span class="etiqueta">Nota técnica</span>
+<h1>Como o Insight Invest funciona</h1>
+<p class="lead">Esta nota documenta de onde vêm os dados, como cada ação recebe um escore, como as carteiras são montadas e
+como o método foi testado. Cada seção começa por um resumo; os detalhes vêm depois.</p>
+
+<section id="introducao">
+<h2>Introdução</h2>
+<div class="resumo"><b>Em resumo:</b> a plataforma dá a cada ação um escore de 0 a 100 a partir do balanço da empresa, do
+comportamento do preço e do cenário econômico; escolhe as melhores para o seu perfil; calcula quanto colocar em cada uma
+e quanto deixar em renda fixa.</div>
+<p class="citacao">Com base no balanço das empresas, no comportamento dos preços e no cenário econômico, quais ações compõem
+uma carteira adequada a cada perfil, e essa combinação de critérios rende mais, por unidade de risco, do que cada critério sozinho?</p>
+<figure class="fig">
+  <div class="fluxo">
+    <div class="caixa dado"><b>CVM</b>balanços anuais (DFP) e cadastro de tickers (FCA)</div>
+    <div class="caixa dado"><b>Banco Central</b>Selic, IPCA, PIB, IBC-Br, balança, desemprego</div>
+    <div class="caixa dado"><b>Yahoo Finance</b>preços ajustados, volume e Ibovespa</div>
+    <div class="caixa dado"><b>Questionário</b>perfil e perda tolerada pelo investidor</div>
+  </div>
+  <div class="seta">↓ carga e limpeza (PostgreSQL)</div>
+  <div class="fluxo">
+    <div class="caixa calc"><b>1. Indicadores</b>fundamentalistas, estatísticos e macro</div>
+    <div class="caixa calc"><b>2. Escore</b>percentis e pesos AHP por perfil</div>
+    <div class="caixa calc"><b>3. Seleção</b>histórico, liquidez, uma ação por empresa</div>
+    <div class="caixa calc"><b>4. Otimização</b>4 modelos, covariância de Ledoit-Wolf</div>
+  </div>
+  <div class="seta">↓</div>
+  <div class="fluxo">
+    <div class="caixa saida" style="grid-column:span 2"><b>5. Renda fixa × ações</b>parcela em ações limitada pela perda que você aceita</div>
+    <div class="caixa saida" style="grid-column:span 2"><b>6. Carteira na plataforma</b>com análise de risco, comparação e sensibilidade macro</div>
+  </div>
+  <figcaption><b>Figura 1 — Fluxo dos dados até a carteira.</b> Fonte: elaboração própria.</figcaption>
+</figure>
+</section>
+
+<section id="fontes">
+<h2>Fontes de dados</h2>
+<div class="resumo"><b>Em resumo:</b> só fontes públicas e oficiais, exceto os preços. Cada fonte entra por um módulo
+próprio e é ligada às outras pelo CNPJ e pelo ticker.</div>
+<table>
+  <tr><th>Fonte</th><th>O que traz</th><th>Ligação</th></tr>
+  <tr><td>CVM — DFP</td><td>Balanço patrimonial e resultado anual de todas as companhias abertas</td><td>CNPJ</td></tr>
+  <tr><td>CVM — FCA</td><td>Tickers negociados de cada companhia (uma empresa pode ter ON, PN e unit)</td><td>CNPJ ↔ ticker</td></tr>
+  <tr><td>Banco Central (SGS)</td><td>Séries macroeconômicas, uma por código</td><td>data</td></tr>
+  <tr><td>Yahoo Finance</td><td>Preços ajustados por proventos e desdobramentos, volume e Ibovespa</td><td>ticker</td></tr>
+</table>
+<p>Um balanço só é usado três meses depois do fim do exercício, prazo em que ele já foi publicado. Ações sem preço ou com
+pouca negociação são tratadas na seleção (<a href="#selecao">ver abaixo</a>).</p>
+</section>
+
+<section id="perfil">
+<h2>Perfil do investidor</h2>
+<div class="resumo"><b>Em resumo:</b> {{ n_perguntas }} perguntas cobrem os três pontos que a Resolução CVM nº 30/2021 manda
+verificar (objetivos, situação financeira e conhecimento), mais a tolerância a perdas. A resposta mais restritiva prevalece.</div>
+<table>
+  <tr><th>Dimensão</th><th>Perguntas</th></tr>
+  {% for d in dimensoes %}<tr><td>{{ d.nome }}</td><td>{% for q in d.perguntas %}{{ q }}{% if not forloop.last %}<br>{% endif %}{% endfor %}</td></tr>{% endfor %}
+</table>
+<p>Cada alternativa vale de 0 a 3 pontos. Faixas: {% for lim, nome in faixas %}{{ nome }} até {{ lim }}{% if not forloop.last %}; {% endif %}{% endfor %}
+pontos. Horizonte de até um ano ou nenhuma perda aceita levam ao perfil conservador, qualquer que seja a pontuação. A resposta
+sobre a perda máxima também define quanto da carteira fica em renda fixa (<a href="#renda-fixa">ver abaixo</a>).</p>
+</section>
+
+<section id="escore">
+<h2>Como o escore é calculado</h2>
+<div class="resumo"><b>Em resumo:</b> cada indicador vira um <b>percentil</b> (a posição da empresa entre as demais, de 0 a 100);
+os percentis são somados com pesos. O escore é relativo: 70 quer dizer que a ação está à frente de cerca de 70% das outras.</div>
+<figure class="fig">
+<svg viewBox="0 0 640 150" role="img" aria-label="Exemplo de normalização por percentil" style="width:100%;max-width:640px">
+  <text x="0" y="16" font-size="12" fill="var(--muted)">ROE informado no balanço</text>
+  <text x="0" y="104" font-size="12" fill="var(--muted)">Percentil (escore do indicador)</text>
+  <g font-size="12" fill="var(--text)">
+    <rect x="0" y="28" width="110" height="34" rx="6" fill="var(--surface)" stroke="var(--border)"/><text x="55" y="50" text-anchor="middle">−1.100%</text>
+    <rect x="130" y="28" width="110" height="34" rx="6" fill="var(--surface)" stroke="var(--border)"/><text x="185" y="50" text-anchor="middle">2%</text>
+    <rect x="260" y="28" width="110" height="34" rx="6" fill="var(--surface)" stroke="var(--border)"/><text x="315" y="50" text-anchor="middle">10%</text>
+    <rect x="390" y="28" width="110" height="34" rx="6" fill="var(--surface)" stroke="var(--border)"/><text x="445" y="50" text-anchor="middle">18%</text>
+    <rect x="520" y="28" width="110" height="34" rx="6" fill="var(--surface)" stroke="var(--border)"/><text x="575" y="50" text-anchor="middle">272%</text>
+  </g>
+  <g stroke="var(--muted)">
+    <line x1="55" y1="62" x2="55" y2="112"/><line x1="185" y1="62" x2="185" y2="112"/><line x1="315" y1="62" x2="315" y2="112"/>
+    <line x1="445" y1="62" x2="445" y2="112"/><line x1="575" y1="62" x2="575" y2="112"/></g>
+  <g font-size="13" font-weight="700" fill="var(--accent)">
+    <rect x="15" y="112" width="80" height="30" rx="6" fill="var(--tint-accent)"/><text x="55" y="132" text-anchor="middle">20</text>
+    <rect x="145" y="112" width="80" height="30" rx="6" fill="var(--tint-accent)"/><text x="185" y="132" text-anchor="middle">40</text>
+    <rect x="275" y="112" width="80" height="30" rx="6" fill="var(--tint-accent)"/><text x="315" y="132" text-anchor="middle">60</text>
+    <rect x="405" y="112" width="80" height="30" rx="6" fill="var(--tint-accent)"/><text x="445" y="132" text-anchor="middle">80</text>
+    <rect x="535" y="112" width="80" height="30" rx="6" fill="var(--tint-accent)"/><text x="575" y="132" text-anchor="middle">100</text>
+  </g>
+</svg>
+<figcaption><b>Figura 2 — Exemplo de normalização por percentil com cinco empresas.</b> Fonte: elaboração própria.</figcaption>
+</figure>
+<div class="como-ler"><b>Como ler:</b> o ROE de −1.100% e o de 272% existem na base (empresas com patrimônio muito pequeno).
+Com o percentil, cada um conta só pela posição: o caso extremo não "puxa" a escala e não distorce a nota das demais.
+Indicador sem dado recebe 50 (neutro).</div>
+
+<h3>As três camadas</h3>
+<table>
+  <tr><th>Camada</th><th>O que entra</th><th>Melhor quando</th></tr>
+  <tr><td>Fundamentalista</td><td><b>Liquidez</b> (corrente, seca, imediata, geral) · <b>Rentabilidade</b> (ROE, ROA, margens, giro) ·
+      <b>Endividamento</b> (dívida líquida ÷ EBITDA) · <b>Crescimento</b> (receita e lucro)</td><td>maior; dívida, menor</td></tr>
+  <tr><td>Estatística (último ano de preços)</td><td>Volatilidade · beta (perto de 0,7 no conservador e de 1 nos demais) ·
+      retorno médio ÷ desvio padrão · bônus por assimetria positiva · bônus por normalidade (só conservador)</td><td>mais estável</td></tr>
+  <tr><td>Macroeconômica</td><td>Selic, inflação, PIB e desemprego em relação a patamares de referência</td><td>cenário melhor</td></tr>
+</table>
+<p>A camada macroeconômica é igual para todas as ações numa mesma data: ela muda o nível do escore, não a ordem entre as ações.</p>
+<div class="formula">Escore final = peso<sub>F</sub> × Fundamentalista + peso<sub>M</sub> × Macro + peso<sub>E</sub> × Estatístico</div>
+</section>
+
+<section id="pesos">
+<h2>Pesos dos critérios</h2>
+<div class="resumo"><b>Em resumo:</b> os pesos vêm do AHP (Processo de Análise Hierárquica): os critérios são comparados dois a dois
+para cada perfil, e o método só aceita comparações coerentes entre si (razão de consistência abaixo de 0,10).</div>
+<figure class="fig">
+  {% for p in perfis %}
+  <div class="linha-pesos"><span>{{ p.nome }}</span>
+    <div class="barra-pesos">
+      <div style="width:{{ p.micro }}%;background:var(--accent)">Fund. {{ p.micro }}%</div>
+      <div style="width:{{ p.macro }}%;background:#64748b">Macro {{ p.macro }}%</div>
+      <div style="width:{{ p.estat }}%;background:#14b8a6">Estat. {{ p.estat }}%</div>
+    </div></div>
+  {% endfor %}
+  <figcaption><b>Figura 3 — Peso de cada camada no escore final, por perfil.</b> Fonte: configuração em uso na plataforma.</figcaption>
+</figure>
+<div class="como-ler"><b>Como ler:</b> em todos os perfis o balanço da empresa pesa cerca de metade. Dentro dele, o conservador
+valoriza liquidez e dívida baixa; o arrojado, rentabilidade e crescimento (tabela abaixo).</div>
+<table>
+  <tr><th>Perfil</th><th class="num">Liquidez</th><th class="num">Rentab.</th><th class="num">Dívida</th><th class="num">Cresc.</th><th class="num">RC</th></tr>
+  {% for p in perfis %}
+  <tr><td>{{ p.nome }}</td><td class="num">{{ p.liquidez }}%</td><td class="num">{{ p.rentabilidade }}%</td><td class="num">{{ p.divida }}%</td>
+      <td class="num">{{ p.crescimento }}%</td><td class="num">{% if p.rc is not None %}{{ p.rc|floatformat:3 }}{% else %}—{% endif %}</td></tr>
+  {% endfor %}
+</table>
+<p>Para testar essa escolha, cada julgamento foi mudado em um grau da escala de Saaty: em média, a lista de ações escolhidas
+continuou mais de 80% igual (índice de Jaccard).
+Os detalhes estão em <a href="{% url 'core:desempenho' %}">Desempenho do modelo</a>.</p>
+</section>
+
+<section id="selecao">
+<h2>Quais ações entram</h2>
+<div class="resumo"><b>Em resumo:</b> as ações são percorridas do maior para o menor escore, e só entram as que têm preço,
+negociação suficiente e não repetem empresa.</div>
+<ul>
+  <li><b>Filtros de balanço por perfil:</b> {% for p in perfis %}{{ p.nome }}: {{ p.filtros }}{% if not forloop.last %} · {% endif %}{% endfor %}.</li>
+  <li><b>Histórico:</b> pelo menos 252 pregões (cerca de um ano) de preços.</li>
+  <li><b>Liquidez:</b> volume mediano de pelo menos R$ {{ liquidez_min|floatformat:1 }} milhão por dia nos últimos 126 pregões
+      e negócios em pelo menos {{ pregoes_min }}% desses dias. Ação quase sem negócio repete o preço dia após dia, parece ter risco
+      baixo e engana o otimizador.</li>
+  <li><b>Uma ação por empresa</b> (ITUB3 e ITUB4 seriam o mesmo risco duas vezes), até o número de ações do perfil.</li>
+</ul>
+</section>
+
+<section id="alocacao">
+<h2>Quanto em cada ação</h2>
+<div class="resumo"><b>Em resumo:</b> o risco e o retorno que você escolhe na página da carteira definem o modelo de alocação.
+Nenhum peso é negativo e cada ação respeita um teto.</div>
+<table>
+  <tr><th>Risco ↓ / retorno →</th>{% for k, v in retornos_alvo.items %}<th>{{ k|title }} ({{ v }})</th>{% endfor %}</tr>
+  {% for l in matriz %}<tr><td>{{ l.risco }}</td>{% for c in l.celulas %}<td>{{ c }}</td>{% endfor %}</tr>{% endfor %}
+</table>
+<ul>
+  <li><b>Paridade de risco:</b> cada ação contribui com a mesma parcela do risco total.</li>
+  <li><b>Markowitz:</b> menor risco possível que alcança o retorno-alvo.</li>
+  <li><b>Máximo Sharpe:</b> maior retorno acima da Selic por unidade de risco, sem passar do teto de volatilidade.</li>
+  <li><b>Alocação por escore:</b> pesos proporcionais ao escore; também é usada quando nenhuma combinação rende mais que a Selic.</li>
+</ul>
+<p>O risco é estimado com três anos de retornos diários e covariância com encolhimento de Ledoit-Wolf, que deixa a estimativa mais
+estável quando há muitas ações e pouco histórico.</p>
+<table>
+  <tr><th>Perfil</th><th class="num">Nº de ações</th><th class="num">Teto por ação</th><th class="num">Perda tolerada em 12 meses</th></tr>
+  {% for p in perfis %}
+  <tr><td>{{ p.nome }}</td><td class="num">{{ p.qtd }}</td><td class="num">{{ p.max_pct }}%</td>
+      <td class="num">{% if p.perda is None %}sem limite{% else %}{{ p.perda }}%{% endif %}</td></tr>
+  {% endfor %}
+</table>
+</section>
+
+<section id="renda-fixa">
+<h2>Renda fixa e ações</h2>
+<div class="resumo"><b>Em resumo:</b> as ações escolhidas são as mesmas para todos do perfil; o que muda de pessoa para pessoa é quanto
+fica nelas. A fração em ações é a maior que mantém a perda provável em 12 meses dentro do que você aceitou no questionário.</div>
+<div class="formula">fração em ações = mín(1, perda tolerada ÷ (1,645 × volatilidade anual das ações))</div>
+<p>A renda fixa é pós-fixada (Tesouro Selic ou CDB a 100% do CDI). A ideia é a separação em dois fundos de Tobin: todo investidor combina
+a mesma carteira de ações com o ativo sem risco, e a tolerância ao risco decide só a proporção.</p>
+</section>
+
+<section id="validacao">
+<h2>Desenho da validação</h2>
+<div class="resumo"><b>Em resumo:</b> o método foi testado como se fosse usado no passado: a cada trimestre a carteira é refeita só com o
+que se sabia naquela data e mantida até o trimestre seguinte. Nada do futuro entra na decisão.</div>
+<figure class="fig">
+  <div class="tempo-rot">Primeira decisão</div>
+  <div class="tempo"><div class="cal">tri 1</div><div class="cal">tri 2</div><div class="cal">tri 3</div><div class="cal">tri 4</div>
+    <div class="cal">tri 5</div><div class="cal">tri 6</div><div class="cal">tri 7</div><div class="cal">tri 8</div>
+    <div class="tst">teste</div><div>—</div><div>—</div><div>—</div></div>
+  <div class="tempo-rot">Decisão seguinte (a janela anda um trimestre)</div>
+  <div class="tempo"><div>—</div><div class="cal">tri 2</div><div class="cal">tri 3</div><div class="cal">tri 4</div><div class="cal">tri 5</div>
+    <div class="cal">tri 6</div><div class="cal">tri 7</div><div class="cal">tri 8</div><div class="cal">tri 9</div>
+    <div class="tst">teste</div><div>—</div><div>—</div></div>
+  <figcaption><b>Figura 4 — Janela móvel do teste:</b> dois anos (8 trimestres) de calibração, em roxo, e um trimestre de teste, em laranja.
+  Fonte: elaboração própria.</figcaption>
+</figure>
+<ul>
+  <li><b>Sem olhar o futuro:</b> indicadores estatísticos recalculados só com a janela; balanço só depois de 90 dias do fim do exercício;
+      execução no pregão seguinte à decisão.</li>
+  <li><b>Comparações:</b> carteira combinada, só fundamentalista, só estatística, 1/N com as mesmas ações, Ibovespa e Selic.</li>
+  <li><b>Custos:</b> 0%, 0,10% e 0,30% sobre o valor negociado.</li>
+  <li><b>Teste estatístico:</b> diferença de índice de Sharpe pelo teste de Ledoit e Wolf (2008), com bootstrap em blocos.</li>
+</ul>
+<p><a href="{% url 'core:desempenho' %}">Ver os resultados →</a></p>
+</section>
+
+<section id="uso">
+<h2>Uso e interpretação</h2>
+<div class="resumo"><b>Em resumo:</b> use a carteira como ponto de partida para estudar, não como ordem de compra. Os números são
+estimativas a partir do passado.</div>
+<ul>
+  <li>O <b>escore</b> ordena as ações; os <b>pesos</b> vêm do otimizador. Uma ação com escore alto pode ter peso pequeno se for muito
+      correlacionada com as demais.</li>
+  <li>O <b>retorno estimado</b> e a <b>volatilidade</b> da página usam os mesmos três anos de preços que escolheram os pesos;
+      por isso tendem a parecer melhores do que o resultado fora da amostra.</li>
+  <li>Passe o mouse no <span class="ajuda" tabindex="0">?<span class="dica">Exemplo de explicação curta de uma métrica.</span></span>
+      ao lado de cada número para ver como lê-lo.</li>
+</ul>
+</section>
+
+<section id="limites">
+<h2>Limitações, cuidados e transparência</h2>
+<div class="resumo"><b>Em resumo:</b> as carteiras são teóricas e educacionais e não constituem recomendação de investimento nos termos
+da Resolução CVM nº 20/2021.</div>
+<ul>
+  <li>O escore <b>não olha o preço da ação</b>: não há indicador de preço (P/L, P/VP) nem de tendência. Uma empresa com bom balanço pode
+      ter escore alto mesmo depois de uma queda forte na bolsa.</li>
+  <li>O balanço anual pode estar defasado em até 15 meses em relação aos fatos mais recentes da empresa.</li>
+  <li>Os preços do Yahoo Finance só cobrem ações ainda listadas: o teste tem <b>viés de sobrevivência</b>.</li>
+  <li>Os pesos do AHP são julgamentos da autora, explícitos e testados quanto à sensibilidade, mas não calibrados nos dados.</li>
+  <li>Rentabilidade passada não garante rentabilidade futura.</li>
+</ul>
+</section>
+
+<section id="glossario">
+<h2>Glossário</h2>
+<table>
+  <tr><td><b>AHP</b></td><td>Método que transforma comparações "este critério é mais importante que aquele" em pesos.</td></tr>
+  <tr><td><b>Beta</b></td><td>Quanto a ação costuma subir ou cair quando o Ibovespa sobe ou cai 1%.</td></tr>
+  <tr><td><b>CVaR</b></td><td>Perda média nos 5% piores dias.</td></tr>
+  <tr><td><b>Drawdown</b></td><td>Queda do valor em relação ao pico anterior.</td></tr>
+  <tr><td><b>Índice de Jaccard</b></td><td>Fração de ações em comum entre duas listas (1 = listas iguais).</td></tr>
+  <tr><td><b>Índice de Sharpe</b></td><td>Retorno acima da Selic dividido pela volatilidade.</td></tr>
+  <tr><td><b>Ledoit-Wolf</b></td><td>Forma de estimar a covariância que reduz o ruído de amostras pequenas.</td></tr>
+  <tr><td><b>Percentil</b></td><td>Posição de um valor entre os demais, de 0 a 100.</td></tr>
+  <tr><td><b>Point-in-time</b></td><td>Usar só a informação disponível na data da decisão.</td></tr>
+  <tr><td><b>1/N</b></td><td>Carteira com o mesmo peso em cada ação, usada como referência simples.</td></tr>
+  <tr><td><b>VaR 95%</b></td><td>Perda diária que só é ultrapassada em 5% dos dias.</td></tr>
+  <tr><td><b>Volatilidade</b></td><td>Quanto o preço oscila, medido pelo desvio padrão anualizado dos retornos.</td></tr>
+</table>
+</section>
+</article>
+</div>
+{% endblock %}
+
+{% block script %}
+<script>
+// destaca no índice a seção que está na tela
+(function(){
+  const links = [...document.querySelectorAll('.nota aside a[href^="#"]')];
+  const obs = new IntersectionObserver(es => es.forEach(e => {
+    if (e.isIntersecting) links.forEach(a => a.classList.toggle('ativo', a.getAttribute('href') === '#' + e.target.id));
+  }), {rootMargin: '-10% 0px -80% 0px'});
+  document.querySelectorAll('.met section').forEach(s => obs.observe(s));
+})();
+</script>
+{% endblock %}

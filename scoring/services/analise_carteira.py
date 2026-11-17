@@ -90,7 +90,25 @@ def _histograma(r: pd.Series, bins: int = 30) -> dict:
     }
 
 
-def estatistica_carteira(r: pd.Series, r_ativos: pd.DataFrame, rf: float) -> dict:
+def _metricas_serie(r: pd.Series, rf: float) -> dict:
+    """Retorno total e anualizado, volatilidade, Sharpe e maior queda de uma série diária."""
+    r = r.dropna()
+    if len(r) < 2:
+        return {}
+    acum = (1 + r).cumprod()
+    total = float(acum.iloc[-1] - 1)
+    anos = len(r) / DIAS_UTEIS_ANO
+    anual = (1 + total) ** (1 / anos) - 1 if anos > 0 and total > -1 else None
+    vol = float(r.std(ddof=1) * math.sqrt(DIAS_UTEIS_ANO))
+    sharpe = (anual - (rf or 0.0)) / vol if anual is not None and vol > 1e-9 else None
+    return {"retorno_total": _f(total, 4), "retorno_anualizado": _f(anual, 4),
+            "volatilidade": _f(vol, 4), "sharpe": _f(sharpe, 2),
+            "drawdown_max": _f(float((acum / acum.cummax() - 1).min()), 4)}
+
+
+def estatistica_carteira(r: pd.Series, r_ativos: pd.DataFrame, rf: float,
+                         comparacoes: dict | None = None) -> dict:
+    """comparacoes: {nome: retornos diários} (1/N, Ibovespa) para o gráfico e a tabela."""
     if len(r) < MIN_DIAS:
         return {"disponivel": False,
                 "motivo": "Histórico de preços insuficiente para a análise estatística."}
@@ -107,6 +125,21 @@ def estatistica_carteira(r: pd.Series, r_ativos: pd.DataFrame, rf: float) -> dic
     semanal = pd.DataFrame({"acum": acumulado, "dd": drawdown}).resample("W").last().dropna()
     rf_semana = (1 + (rf or 0.0)) ** (1 / 52) - 1
     so_rf = (1 + rf_semana) ** np.arange(1, len(semanal) + 1)
+
+    # Comparações no mesmo calendário e na mesma escala (retorno acumulado)
+    series_extra, tabela = {}, [{"id": "carteira", "nome": "Sua carteira", **_metricas_serie(r, rf)}]
+    nomes = {"um_n": "1/N (mesmas ações, mesma renda fixa)", "ibovespa": "Ibovespa"}
+    for chave, rc in (comparacoes or {}).items():
+        rc = rc.reindex(r.index)
+        if rc.notna().mean() < 0.9:          # série incompleta no período: não compara
+            continue
+        rc = rc.fillna(0.0)
+        acc = (1 + rc).cumprod().resample("W").last().reindex(semanal.index).ffill()
+        series_extra[chave] = [_f(v - 1, 4) for v in acc]
+        tabela.append({"id": chave, "nome": nomes.get(chave, chave), **_metricas_serie(rc, rf)})
+    rf_d = pd.Series((1 + (rf or 0.0)) ** (1 / DIAS_UTEIS_ANO) - 1, index=r.index)
+    tabela.append({"id": "renda_fixa", "nome": "Só renda fixa (Selic atual)", **_metricas_serie(rf_d, rf),
+                   "sharpe": None})
 
     pior_dia = r.idxmin()
     fundo = drawdown.idxmin()
@@ -141,7 +174,9 @@ def estatistica_carteira(r: pd.Series, r_ativos: pd.DataFrame, rf: float) -> dic
             "acumulado": [_f(v - 1, 4) for v in semanal["acum"]],
             "so_renda_fixa": [_f(v - 1, 4) for v in so_rf],
             "drawdown": [_f(v, 4) for v in semanal["dd"]],
+            **series_extra,
         },
+        "comparacao": tabela,
         "correlacao": {
             "tickers": list(corr.columns),
             "matriz": [[_f(v, 2) for v in linha] for linha in corr.values],
@@ -290,9 +325,23 @@ def sensibilidade_macro(r_carteira: pd.Series, r_ativos: pd.DataFrame, scores: d
 # Ponto de entrada
 # ─────────────────────────────────────────────────────────────────────
 
+def _recortar(serie_ou_df, anos: float | None):
+    """Últimos `anos` do histórico (None = tudo)."""
+    if serie_ou_df is None or anos is None or len(serie_ou_df) == 0:
+        return serie_ou_df
+    idx = pd.to_datetime(serie_ou_df.index)
+    inicio = idx.max() - pd.DateOffset(years=int(anos))
+    return serie_ou_df[idx >= inicio]
+
+
 def analisar_carteira(precos: pd.DataFrame | None, pesos_acoes: dict, pct_renda_fixa: float,
-                      rf: float, scores: dict | None = None) -> dict:
-    """pesos_acoes: {ticker: fração (0-1) da carteira total}."""
+                      rf: float, scores: dict | None = None, ibovespa: pd.Series | None = None,
+                      horizonte_anos: int | None = None) -> dict:
+    """
+    pesos_acoes: {ticker: fração (0-1) da carteira total}.
+    ibovespa: fechamento diário do índice, para comparação (opcional).
+    horizonte_anos: período da simulação (últimos N anos dos preços; None = todos).
+    """
     if (precos is None or precos.empty) and pesos_acoes:
         msg = "Sem histórico de preços para analisar a carteira."
         return {"estatistica": {"disponivel": False, "motivo": msg},
@@ -305,12 +354,28 @@ def analisar_carteira(precos: pd.DataFrame | None, pesos_acoes: dict, pct_renda_
         return {"estatistica": {"disponivel": False, "motivo": msg},
                 "macro": {"disponivel": False, "motivo": msg}}
     precos.index = pd.to_datetime(precos.index)
+    precos = _recortar(precos, horizonte_anos)
     r, r_ativos = retornos_diarios(precos, pesos_acoes, pct_renda_fixa, rf)
     if r.empty:
         msg = "Sem histórico de preços para os ativos da carteira."
         return {"estatistica": {"disponivel": False, "motivo": msg},
                 "macro": {"disponivel": False, "motivo": msg}}
+    comparacoes = {}
+    # 1/N: as mesmas ações com pesos iguais e a mesma parcela em renda fixa;
+    # isola o efeito dos pesos escolhidos pelo otimizador.
+    tickers = [t for t in pesos_acoes if t in precos.columns]
+    if len(tickers) >= 2:
+        fatia = (1 - pct_renda_fixa / 100.0) / len(tickers)
+        r_um_n, _ = retornos_diarios(precos, {t: fatia for t in tickers}, pct_renda_fixa, rf)
+        comparacoes["um_n"] = r_um_n
+    if ibovespa is not None and len(ibovespa.dropna()) > 1:
+        ib = ibovespa.copy()
+        ib.index = pd.to_datetime(ib.index)
+        ib = ib.sort_index()
+        ib = ib.reindex(ib.index.union(r.index)).ffill().reindex(r.index)
+        comparacoes["ibovespa"] = ib.pct_change(fill_method=None)
+        comparacoes["ibovespa"].iloc[0] = 0.0
     return {
-        "estatistica": estatistica_carteira(r, r_ativos, rf),
+        "estatistica": estatistica_carteira(r, r_ativos, rf, comparacoes),
         "macro": sensibilidade_macro(r, r_ativos, scores or {}),
     }

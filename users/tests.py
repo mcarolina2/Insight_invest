@@ -7,9 +7,9 @@ def resp(valor):  # todas as respostas com o mesmo índice
 
 class QuizTests(SimpleTestCase):
     def test_faixas(self):
-        self.assertEqual(classificar(resp(1))["perfil"], "conservador")   # 7 pontos
-        self.assertEqual(classificar(resp(2))["perfil"], "intermediario") # 14 pontos
-        self.assertEqual(classificar(resp(3))["perfil"], "arrojado")      # 21 pontos
+        self.assertEqual(classificar(resp(1))["perfil"], "conservador")   # 8 pontos
+        self.assertEqual(classificar(resp(2))["perfil"], "intermediario") # 16 pontos
+        self.assertEqual(classificar(resp(3))["perfil"], "arrojado")      # 24 pontos
 
     def test_trava_de_horizonte_curto(self):
         r = resp(3); r["horizonte"] = 0

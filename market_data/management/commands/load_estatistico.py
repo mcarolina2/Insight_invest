@@ -67,6 +67,11 @@ class Command(BaseCommand):
             raise CommandError(f"Falha ao baixar preços: {e}")
 
         tickers_disponiveis = precos.columns.tolist()
+
+        # Liquidez recente (mediana do volume em R$ e fração de dias com negócio):
+        # usada para tirar dos rankings da home as ações quase sem negociação.
+        from scoring.services.precos import liquidez
+        liq = liquidez(precos, precos.attrs.get("volume"))
         self.stdout.write(
             self.style.SUCCESS(f"    {len(tickers_disponiveis)} tickers com dados\n")
         )
@@ -101,6 +106,9 @@ class Command(BaseCommand):
                 import math
                 stats = {k: (None if isinstance(v, float) and not math.isfinite(v) else v)
                          for k, v in stats.items()}
+                if not liq.empty and ticker in liq.index:
+                    stats["volume_mediano"] = round(float(liq.at[ticker, "volume_financeiro"]), 2)
+                    stats["pregoes_com_negocio"] = round(float(liq.at[ticker, "pregoes_com_negocio"]), 4)
 
                 with transaction.atomic():
                     KpiEstatistico.objects.update_or_create(

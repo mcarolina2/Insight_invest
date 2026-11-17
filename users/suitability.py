@@ -13,10 +13,13 @@ PERGUNTAS = [
     {"id": "perda_max", "dimensao": "perdas",
      "texto": "Qual perda máxima você aceitaria em 12 meses?",
      "opcoes": ["Nenhuma", "Até 5%", "Até 15%", "Mais de 15%"]},
-    {"id": "necessidade", "dimensao": "perdas",
+    {"id": "necessidade", "dimensao": "situacao",
      "texto": "Esse dinheiro pode fazer falta nos próximos 12 meses?",
      "opcoes": ["Sim, com certeza", "Talvez", "Provavelmente não",
                 "Não, tenho reserva separada"]},
+    {"id": "patrimonio", "dimensao": "situacao",
+     "texto": "Quanto este investimento representa do seu patrimônio (sem contar o imóvel onde mora)?",
+     "opcoes": ["Mais de 75%", "Entre 50% e 75%", "Entre 25% e 50%", "Menos de 25%"]},
     {"id": "conhecimento", "dimensao": "conhecimento",
      "texto": "Como você avalia seu conhecimento sobre investimentos?",
      "opcoes": ["Nenhum", "Básico (poupança, CDB)",
@@ -28,13 +31,18 @@ PERGUNTAS = [
                 "Renda variável há mais de 2 anos"]},
 ]
 
-PONTUACAO_MAXIMA = 3 * len(PERGUNTAS)          # 21
+PONTUACAO_MAXIMA = 3 * len(PERGUNTAS)          # 24
+# Os três eixos do art. 3º da Resolução CVM nº 30/2021 (objetivos, situação
+# financeira e conhecimento) e a tolerância a perdas, que concretiza a
+# "preferência quanto a risco" dentro dos objetivos de investimento.
 DIMENSOES = {
     "objetivos":    "Objetivos e horizonte",
-    "perdas":       "Tolerância a perdas e necessidade de recursos",
+    "situacao":     "Situação financeira",
+    "perdas":       "Tolerância a perdas",
     "conhecimento": "Conhecimento e experiência",
 }
-FAIXAS = [(8, "conservador"), (15, "intermediario"), (21, "arrojado")]
+# Mesmos cortes de antes (8/21 e 15/21), reescalados para 24 pontos.
+FAIXAS = [(9, "conservador"), (17, "intermediario"), (24, "arrojado")]
 
 
 def validar(respostas: dict) -> dict:

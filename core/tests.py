@@ -1,4 +1,5 @@
 """Testes da página do ativo, da busca, dos perfis, dos papéis e do quiz."""
+import io
 from datetime import date, timedelta
 from unittest.mock import patch
 
@@ -15,7 +16,7 @@ from scoring.services.motor_scoring_v2 import calcular_scores_v2, selecionar_can
 from scoring.tests import criar_base, precos_simulados, respostas_quiz
 from users.models import PerfilRisco, RespostaQuiz, User
 
-SILENCIO = open("/dev/null", "w")
+SILENCIO = io.StringIO()
 
 
 @patch("scoring.services.precos.baixar_precos", side_effect=precos_simulados)
@@ -162,7 +163,7 @@ class QuizTests(TestCase):
         r = self.client.post(reverse("users:quiz"), respostas_quiz(3))
         self.assertEqual(RespostaQuiz.objects.filter(user=self.u).count(), 2)
         ultima = RespostaQuiz.objects.filter(user=self.u).first()
-        self.assertEqual((ultima.perfil, ultima.pontuacao), ("arrojado", 21))
+        self.assertEqual((ultima.perfil, ultima.pontuacao), ("arrojado", 24))
         self.assertEqual(PerfilRisco.objects.get(user=self.u).tipo, "arrojado")
         self.assertContains(r, "Como você pontuou")
         self.assertContains(r, "Conhecimento e experiência")

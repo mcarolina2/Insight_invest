@@ -597,7 +597,17 @@ class KpiEstatistico(models.Model):
         null=True, blank=True,
         help_text="Número real de pregões usados no cálculo"
     )
- 
+
+    # ── Liquidez (últimos 126 pregões) ───────────────────────────────
+    volume_mediano = models.DecimalField(
+        max_digits=18, decimal_places=2, null=True, blank=True,
+        help_text="Mediana do volume financeiro diário (R$), últimos 126 pregões"
+    )
+    pregoes_com_negocio = models.DecimalField(
+        max_digits=5, decimal_places=4, null=True, blank=True,
+        help_text="Fração dos últimos 126 pregões com negócio"
+    )
+
     class Meta:
         unique_together = ('ativo', 'data_calculo', 'janela_dias')
         ordering        = ['-data_calculo']

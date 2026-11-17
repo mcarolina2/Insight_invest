@@ -11,7 +11,7 @@
          border-radius:10px;font-size:14px;color:var(--text);cursor:pointer;transition:border-color .15s,background .15s}
   .opcao:hover{border-color:var(--accent)}
   .opcao input{accent-color:var(--accent);width:16px;height:16px;margin:0}
-  .opcao:has(input:checked){border-color:var(--accent);background:#1e1b4b}
+  .opcao:has(input:checked){border-color:var(--accent);background:var(--tint-accent)}
   .navegacao{display:flex;justify-content:space-between;gap:10px;margin-top:6px}
   .js .pergunta{display:none}
   .js .pergunta.atual{display:block}
@@ -20,7 +20,7 @@
 {% endblock %}
 {% block conteudo %}
 <h1>{% if refazendo %}Refazer questionário de perfil{% else %}Qual é o seu perfil de investidor?{% endif %}</h1>
-<p class="muted">São 7 perguntas sobre seus objetivos, sua tolerância a perdas e seu conhecimento — dimensões inspiradas na Resolução CVM nº 30/2021. Leva cerca de 1 minuto.</p>
+<p class="muted">São {{ perguntas|length }} perguntas sobre seus objetivos, sua situação financeira, sua tolerância a perdas e seu conhecimento, os pontos que a Resolução CVM nº 30/2021 manda verificar. Escolha uma alternativa e clique em <b>Próxima</b>; dá para voltar e mudar a resposta antes de ver o resultado.</p>
 {% if erro %}<div class="msg erro">{{ erro }}</div>{% endif %}
 
 <div class="so-com-js">
@@ -80,10 +80,14 @@
     document.getElementById('avancar').disabled = !respondida(atual);
     document.getElementById('enviar').disabled = perguntas.some((_,i)=>!respondida(i));
   }
-  form.addEventListener('change', e=>{
-    if (e.target.type !== 'radio') return;
-    mostrar();
-    if (atual < total-1) setTimeout(()=>{ atual++; mostrar(); }, 250);   // avança sozinho
+  // Não avança sozinho: a pessoa confere a alternativa e clica em "Próxima"
+  // (ou tecla Enter), para não pular pergunta por um clique errado.
+  form.addEventListener('change', e=>{ if (e.target.type === 'radio') mostrar(); });
+  form.addEventListener('keydown', e=>{
+    if (e.key !== 'Enter') return;
+    e.preventDefault();
+    if (atual < total-1) document.getElementById('avancar').click();
+    else if (!document.getElementById('enviar').disabled) form.requestSubmit();
   });
   document.getElementById('avancar').onclick = ()=>{ if (respondida(atual) && atual<total-1){ atual++; mostrar(); } };
   document.getElementById('voltar').onclick = ()=>{ if (atual>0){ atual--; mostrar(); } };

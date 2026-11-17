@@ -168,6 +168,24 @@ def calcular_score_macro(kpi_macro) -> float:
 # SCORE ESTATÍSTICO — recompensa estabilidade calibrada por perfil
 # =============================================================================
 
+def _retorno_por_risco(df_estat: pd.DataFrame) -> pd.Series | None:
+    """Inverso do coeficiente de variação com sinal: média / desvio padrão
+    dos retornos diários. None se não houver dado para calcular."""
+    cols = df_estat.columns
+    if 'media_retorno' in cols and 'dp_retorno' in cols:
+        dp = pd.to_numeric(df_estat['dp_retorno'], errors='coerce').replace(0, np.nan)
+        rr = pd.to_numeric(df_estat['media_retorno'], errors='coerce') / dp
+    elif 'cv' in cols and 'media_retorno' in cols:
+        cv = pd.to_numeric(df_estat['cv'], errors='coerce').abs().replace(0, np.nan)
+        rr = np.sign(pd.to_numeric(df_estat['media_retorno'], errors='coerce')) / cv
+    elif 'cv' in cols:                       # CV já com sinal (média / dp invertido)
+        cv = pd.to_numeric(df_estat['cv'], errors='coerce').replace(0, np.nan)
+        rr = 1 / cv
+    else:
+        return None
+    return rr.replace([np.inf, -np.inf], np.nan)
+
+
 def calcular_score_estat(df_estat: pd.DataFrame, perfil: str) -> pd.Series:
     """
     Score estatístico com lógica diferente por perfil:
@@ -191,9 +209,14 @@ def calcular_score_estat(df_estat: pd.DataFrame, perfil: str) -> pd.Series:
         dist_beta = (df_estat['beta'] - (0.7 if perfil == 'conservador' else 1.0)).abs()
         scores['beta'] = _norm(dist_beta, inverter=True)
 
-    # CV: todos preferem menor risco relativo
-    if 'cv' in df_estat.columns:
-        scores['cv'] = _norm(df_estat['cv'].abs(), inverter=True)
+    # Risco relativo: todos preferem mais retorno médio por unidade de risco.
+    # Usa-se o inverso do CV (média / desvio padrão), que preserva a ordem do CV
+    # quando a média é positiva e põe no fim os ativos com média NEGATIVA.
+    # (O |CV| antigo premiava ações em queda forte: média muito negativa
+    # deixava o |CV| pequeno, como se o risco relativo fosse baixo.)
+    rr = _retorno_por_risco(df_estat)
+    if rr is not None:
+        scores['cv'] = _norm(rr)
 
     # Skewness positivo: bônus para todos, mas mais para arrojado
     bonus = 0
@@ -335,7 +358,8 @@ def calcular_scores_v2(perfil: str = 'intermediario', data_ref: date | None = No
                       .filter(ativo_id__in=df['ativo_id'].tolist(), data_calculo__lte=data_ref)
                       .order_by('ativo_id', '-data_calculo')
                       .values('ativo_id', 'ativo__ticker', 'volatilidade_anual', 'beta',
-                              'skewness', 'curtose', 'retorno_normal', 'cv'))
+                              'skewness', 'curtose', 'retorno_normal', 'cv',
+                              'media_retorno', 'dp_retorno'))
         estat_rows = _ultimo_por_ativo(estat_rows, 'data_calculo')
     if estat_rows:
         df_estat = pd.DataFrame(estat_rows).set_index('ativo__ticker').drop(columns='ativo_id')
@@ -373,7 +397,10 @@ def selecionar_candidatos(df_scores: pd.DataFrame, perfil: str,
     df = df_scores[df_scores['score_final'] >= cfg['score_min']]
     df = df[df['ticker'].str.len().between(4, 6) & ~df['ticker'].str.contains(' ')]
     if setor:
-        df = df[df['setor'] == setor]
+        # um setor (texto) ou vários (lista); vazio = todos
+        setores = [setor] if isinstance(setor, str) else [x for x in setor if x]
+        if setores:
+            df = df[df['setor'].isin(setores)]
     df = df.sort_values('score_final', ascending=False)
     if um_por_empresa and 'empresa' in df.columns:
         df = df[~df['empresa'].duplicated()]
