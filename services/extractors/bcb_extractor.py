@@ -29,7 +29,9 @@ SERIES_BCB = {
     "selic"            : (432,   "Taxa Selic Meta (% a.a.)"),
     "ipca_mensal"      : (433,   "IPCA mensal (%)"),
     "igpm_mensal"      : (189,   "IGP-M mensal (%)"),
-    "ibc_br"           : (4380,  "IBC-Br — proxy do PIB mensal (índice)"),
+    # 4380 é o PIB MENSAL NOMINAL em R$ milhões (não é o IBC-Br). O IBC-Br com
+    # ajuste sazonal é a série 24364 (índice, 2002 = 100).
+    "ibc_br"           : (24364, "IBC-Br dessazonalizado (índice, 2002=100)"),
     # A série 7326 é ANUAL (variação real do PIB no ano); o campo mantém o nome
     # antigo para não exigir migração.
     "pib_trimestral"   : (7326,  "PIB — variação real anual (%)"),
@@ -38,6 +40,7 @@ SERIES_BCB = {
     "exportacoes"      : (22708, "Exportação de bens — Balanço de Pagamentos (US$ milhões)"),
     "importacoes"      : (22709, "Importação de bens — Balanço de Pagamentos (US$ milhões)"),
     "desemprego"       : (24369, "Taxa de desemprego PNAD (%)"),
+    "dolar_brl"        : (3698,  "Câmbio R$/US$ (venda, média do mês)"),
 }
 
 HEADERS = {

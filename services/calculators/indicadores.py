@@ -113,12 +113,23 @@ def margem_bruta(resultado_bruto: float, receita: float) -> float | None:
     return round(resultado_bruto / receita, 4) if receita and receita != 0 else None
 
 
+# Margem acima de 100% da receita não tem interpretação econômica: acontece em
+# holdings, cujo resultado vem de participações e não de vendas. Fica sem valor.
+MARGEM_MAXIMA = 1.0
+
+
 def margem_ebitda(ebitda: float, receita: float) -> float | None:
-    return round(ebitda / receita, 4) if receita and receita != 0 else None
+    if not receita or receita <= 0:
+        return None
+    m = round(ebitda / receita, 4)
+    return m if m <= MARGEM_MAXIMA else None
 
 
 def margem_liquida(lucro_liquido: float, receita: float) -> float | None:
-    return round(lucro_liquido / receita, 4) if receita and receita != 0 else None
+    if not receita or receita <= 0:
+        return None
+    m = round(lucro_liquido / receita, 4)
+    return m if m <= MARGEM_MAXIMA else None
 
 
 # ---------------------------------------------------------------------------
@@ -185,7 +196,10 @@ def calcular_kpis_micro(bp_row: dict, dre_row: dict, dre_anterior: dict = None) 
      # Cálculos derivados
     db          = divida_bruta(emp_cp, emp_lp)
     dl          = divida_liquida(emp_cp, emp_lp, caixa)
-    ebitda_val  = calcular_ebitda(res_oper)
+    # EBITDA = EBIT + depreciação e amortização (DFC). Sem a DFC indireta, fica o EBIT.
+    da = dre_row.get("depreciacao_amortizacao")
+    da = 0 if da is None or (isinstance(da, float) and da != da) else da
+    ebitda_val  = calcular_ebitda(res_oper, da)
 
     # Crescimento vs período anterior
     cresc_receita = None

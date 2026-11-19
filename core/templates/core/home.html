@@ -97,7 +97,6 @@
 {% if macro or score_macro %}
 <div class="faixa">
   {% if macro %}<span>Selic <b>{{ macro.selic|floatformat:2 }}% a.a.</b></span>{% endif %}
-  {% if score_macro %}<span>Escore macro <b class="{% if score_macro < 40 %}down{% else %}up{% endif %}">{{ score_macro|floatformat:0 }}/100</b></span>{% endif %}
 </div>
 {% endif %}
 
@@ -105,7 +104,7 @@
 <p class="vazio" style="margin:-6px 0 12px">Uma ação por empresa e só ações com negociação suficiente (a mesma regra de liquidez das carteiras).</p>
 <div class="grade g4">
   <div class="card">
-    <div class="titulo-card">Maior escore</div>
+    <div class="titulo-card" title="Escore final de 0 a 100 no perfil intermediário (referência). Faça o quiz para ver o seu perfil na carteira.">Maior escore <small>· perfil intermediário{% if data_scores %} · {{ data_scores|date:"d/m/Y" }}{% endif %}</small></div>
     {% for r in ranking_score %}
     <a class="rank" href="{% url 'core:ativo' r.ticker %}">
       <span class="rank-pos">{{ r.posicao }}</span><span class="rank-ticker">{{ r.ticker }}</span>
@@ -114,16 +113,16 @@
     {% empty %}<p class="vazio">Sem dados.</p>{% endfor %}
   </div>
   <div class="card">
-    <div class="titulo-card">Maior dividend yield</div>
+    <div class="titulo-card" title="Desvio-padrão dos retornos diários dos últimos 12 meses, anualizado">Menor volatilidade <small>· 12 meses</small></div>
     {% for r in ranking_dy %}
     <a class="rank" href="{% url 'core:ativo' r.ticker %}">
       <span class="rank-pos">{{ r.posicao }}</span><span class="rank-ticker">{{ r.ticker }}</span>
-      <span class="rank-setor" title="{{ r.setor }}">{{ r.setor }}</span><span class="rank-valor">{{ r.valor }}%</span>
+      <span class="rank-setor" title="{{ r.setor }}">{{ r.setor }}</span><span class="rank-valor">{{ r.valor|floatformat:1 }}%</span>
     </a>
     {% empty %}<p class="vazio">Sem dados.</p>{% endfor %}
   </div>
   <div class="card">
-    <div class="titulo-card" title="Lucro líquido ÷ patrimônio líquido, entre empresas com dívida líquida/EBITDA até 3x">Maior ROE</div>
+    <div class="titulo-card" title="Lucro líquido ÷ patrimônio líquido, entre empresas com dívida líquida/EBITDA até 3x">Maior ROE{% if ano_dfp %} <small>· DFP {{ ano_dfp }}</small>{% endif %}</div>
     {% for r in ranking_liquidez %}
     <a class="rank" href="{% url 'core:ativo' r.ticker %}">
       <span class="rank-pos">{{ r.posicao }}</span><span class="rank-ticker">{{ r.ticker }}</span>
@@ -132,11 +131,11 @@
     {% empty %}<p class="vazio">Sem dados.</p>{% endfor %}
   </div>
   <div class="card">
-    <div class="titulo-card" title="Dívida líquida ÷ EBITDA: quantos anos de geração de caixa pagariam a dívida">Menor endividamento</div>
+    <div class="titulo-card" title="Dívida líquida ÷ EBITDA: quantos anos de geração de caixa pagariam a dívida">Menor endividamento{% if ano_dfp %} <small>· DFP {{ ano_dfp }}</small>{% endif %}</div>
     {% for r in ranking_divida %}
     <a class="rank" href="{% url 'core:ativo' r.ticker %}">
       <span class="rank-pos">{{ r.posicao }}</span><span class="rank-ticker">{{ r.ticker }}</span>
-      <span class="rank-setor" title="{{ r.setor }}">{{ r.setor }}</span><span class="rank-valor laranja">{{ r.valor|floatformat:2 }}x</span>
+      <span class="rank-setor" title="{{ r.setor }}">{{ r.setor }}</span><span class="rank-valor laranja">{% if r.caixa_liquido %}caixa líquido{% else %}{{ r.valor|floatformat:2 }}x{% endif %}</span>
     </a>
     {% empty %}<p class="vazio">Sem dados.</p>{% endfor %}
   </div>
@@ -162,7 +161,15 @@
         <div class="ac" style="width:{{ c.metricas.pct_acoes|floatformat:0 }}%"></div>
       </div>
       <div class="divisao-leg"><span>Renda fixa {{ c.metricas.pct_renda_fixa|floatformat:0 }}%</span><span>Ações {{ c.metricas.pct_acoes|floatformat:0 }}%</span></div>
+      <p style="font-size:12px;color:var(--muted);margin:6px 0 10px;line-height:1.45">{{ c.explicacao }}</p>
       {% endif %}
+      {% if user.is_authenticated %}{% with lista=c.ativos_todos %}{% for a in lista %}
+      <div class="item">
+        <span class="item-ticker">{% if a.tipo == "renda_fixa" %}{{ a.ticker }}{% else %}<a href="{% url 'core:ativo' a.ticker %}">{{ a.ticker }}</a>{% endif %}</span>
+        <div class="barra"><div class="{% if a.tipo == 'renda_fixa' %}rf{% endif %}" style="width:{{ a.pct|floatformat:0 }}%"></div></div>
+        <span class="item-pct">{{ a.pct|floatformat:1 }}%</span>
+      </div>
+      {% endfor %}{% endwith %}{% else %}
       {% for a in c.ativos %}
       <div class="item">
         <span class="item-ticker">{% if a.tipo == "renda_fixa" %}{{ a.ticker }}{% else %}<a href="{% url 'core:ativo' a.ticker %}">{{ a.ticker }}</a>{% endif %}</span>
@@ -172,7 +179,7 @@
       {% endfor %}
       {% if c.qtd_total > 4 %}
       <div class="mais">+{{ c.qtd_total|add:"-4" }} itens disponíveis após o cadastro.</div>
-      {% endif %}
+      {% endif %}{% endif %}
     {% endif %}
 
     <div class="perfil-cta-wrap">
@@ -184,26 +191,31 @@
 
 <div class="grade g2" style="margin-top:24px">
   <div class="card">
-    <div class="titulo-card">Notícias e sentimento de mercado</div>
-    {% for n in noticias %}
-    <div class="noticia">
-      <span class="badge badge-{{ n.sentimento_label }}">{{ n.sentimento_label }}</span>
-      <span class="noticia-texto">{{ n.texto|truncatechars:110 }}</span>
-    </div>
-    {% empty %}<p class="vazio">Nenhuma notícia coletada ainda.</p>{% endfor %}
+    <div class="titulo-card">Como o escore macro é formado</div>
+    {% if macro_partes %}
+    <table class="macro-tab">
+      <tr><td>Base</td><td>50</td></tr>
+      {% for c in macro_partes %}
+      <tr><td>{{ c.nome }} <span class="ref">{{ c.valor|floatformat:2 }}{{ c.unidade }} · {{ c.regra }}</span></td>
+          <td class="{% if c.pontos < 0 %}down{% elif c.pontos > 0 %}up{% endif %}">{% if c.pontos > 0 %}+{% endif %}{{ c.pontos|floatformat:1 }}</td></tr>
+      {% endfor %}
+      <tr><td><b>Escore macro</b> <span class="ref">limitado a 0–100</span></td><td><b>{{ score_macro|floatformat:0 }}</b></td></tr>
+    </table>
+    <p class="vazio" style="margin-top:8px">É o mesmo para todas as ações numa data: muda o nível do escore final, não a ordem entre as ações.
+      <a href="{% url 'core:metodologia' %}">Ver a fórmula</a>.</p>
+    {% else %}<p class="vazio">Dados macro ainda não carregados.</p>{% endif %}
   </div>
   <div class="card">
-    <div class="titulo-card">Radar macroeconômico</div>
+    <div class="titulo-card">Radar macroeconômico <small>· Banco Central (SGS)</small></div>
     {% if macro %}
     <table class="macro-tab">
       {% if macro.selic is not None %}<tr><td>Selic (meta)</td><td>{{ macro.selic|floatformat:2 }}% a.a.</td></tr>{% endif %}
       {% if macro.ipca_12m is not None %}<tr><td>IPCA 12 meses</td><td>{{ macro.ipca_12m|floatformat:2 }}%</td></tr>{% endif %}
       {% if macro.ipca_mensal is not None %}<tr><td>IPCA no mês <span class="ref">{{ macro.datas.ipca_mensal|date:"m/Y" }}</span></td><td>{{ macro.ipca_mensal|floatformat:2 }}%</td></tr>{% endif %}
       {% if macro.pib_trimestral is not None %}<tr><td>PIB (variação no ano) <span class="ref">{{ macro.datas.pib_trimestral|date:"Y" }}</span></td><td>{{ macro.pib_trimestral|floatformat:1 }}%</td></tr>{% endif %}
-      {% if macro.ibc_br is not None %}<tr><td>IBC-Br (atividade) <span class="ref">{{ macro.datas.ibc_br|date:"m/Y" }}</span></td><td>{{ macro.ibc_br|floatformat:1 }}</td></tr>{% endif %}
-      {% if macro.balanca_comercial is not None %}<tr><td>Balança comercial <span class="ref">{{ macro.datas.balanca_comercial|date:"m/Y" }}</span></td><td>US$ {{ macro.balanca_comercial|floatformat:0 }} mi</td></tr>{% endif %}
+      {% if macro.ibc_br_12m is not None %}<tr><td>IBC-Br (atividade, 12 meses) <span class="ref">{{ macro.datas.ibc_br|date:"m/Y" }}</span></td><td>{{ macro.ibc_br_12m|floatformat:1 }}%</td></tr>{% endif %}
+      {% if macro.balanca_comercial is not None %}<tr><td>Balança comercial <span class="ref">{{ macro.datas.balanca_comercial|date:"m/Y" }}</span></td><td>US$ {{ macro.balanca_comercial|floatformat:"0g" }} mi</td></tr>{% endif %}
       {% if macro.desemprego is not None %}<tr><td>Desemprego <span class="ref">{{ macro.datas.desemprego|date:"m/Y" }}</span></td><td>{{ macro.desemprego|floatformat:1 }}%</td></tr>{% endif %}
-      {% if score_macro %}<tr><td>Escore macro</td><td>{{ score_macro|floatformat:0 }}/100</td></tr>{% endif %}
     </table>
     {% if macro.ipca_mensal is None %}<p class="vazio" style="margin-top:8px">Só a Selic foi carregada. Rode <code>load_macro_data</code> para trazer inflação, PIB, atividade e balança comercial.</p>{% endif %}
     {% else %}<p class="vazio">Dados macro ainda não carregados.</p>{% endif %}

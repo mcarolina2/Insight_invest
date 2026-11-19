@@ -115,6 +115,16 @@ class Command(BaseCommand):
                     copiados += len(lote)
                 self.stdout.write(f"\r  {m._meta.label}: {copiados:,}/{total:,}")
 
+            # Ativos que existem no destino mas não no local (tickers inventados ou
+            # removidos pelo corrigir_tickers): não são apagados (podem ter dados de
+            # usuários ligados), mas ficam inativos e somem de rankings, busca e escore.
+            Ativo = apps.get_model("portfolio.Ativo")
+            locais = set(Ativo.objects.using("default").values_list("id", flat=True))
+            orfaos = Ativo.objects.using("destino").exclude(id__in=locais).filter(ativo=True)
+            n_orfaos = orfaos.update(ativo=False)
+            if n_orfaos:
+                self.stdout.write(f"  {n_orfaos} ativo(s) que não existem no banco local foram desativados no destino.")
+
         # Ajusta os contadores de id do destino para continuarem após os ids copiados
         sql = destino.ops.sequence_reset_sql(no_style(), modelos)
         with destino.cursor() as c:

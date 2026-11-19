@@ -164,7 +164,7 @@ h1.titulo-carteira{font-size:22px;font-weight:700;letter-spacing:-.5px;margin:0}
     <div class="subtitle">Ajuste os filtros: o modelo de alocação muda conforme a combinação de risco e retorno.</div>
   </div>
   <div class="acoes-topo">
-    <span class="perfil-badge {{ perfil }}">Perfil {{ perfil|title }}</span>
+    <span class="perfil-badge {{ perfil }}">Perfil {{ perfil_nome }}</span>
     <a href="{% url 'users:quiz' %}" class="muted nao-imprimir">refazer questionário</a>
     <a href="{% url 'core:metodologia' %}" class="muted nao-imprimir">como funciona</a>
     <button type="button" class="btn-pdf nao-imprimir" onclick="exportarPDF()" title="Abre a janela de impressão; escolha &quot;Salvar como PDF&quot;">Exportar PDF</button>
@@ -236,7 +236,7 @@ h1.titulo-carteira{font-size:22px;font-weight:700;letter-spacing:-.5px;margin:0}
     <div class="pie-title">Alocação</div>
     <div class="pie-wrap">
       <canvas id="pie" width="200" height="200"></canvas>
-      <div class="pie-center"><div class="pct" id="pie-qtd">–</div><div class="lbl">ações</div></div>
+      <div class="pie-center"><div class="pct" id="pie-qtd">–</div><div class="lbl" id="pie-lbl">ações</div></div>
     </div>
     <div class="leg-list" id="legend"></div>
   </div>
@@ -279,6 +279,7 @@ h1.titulo-carteira{font-size:22px;font-weight:700;letter-spacing:-.5px;margin:0}
 
 {% block script %}
 <script>
+const fmtBR = (v, c=1) => Number(v).toLocaleString('pt-BR', {minimumFractionDigits: c, maximumFractionDigits: c});
 const URL_OTIMIZAR = "{% url 'scoring:otimizar' %}";
 const CSRF = document.querySelector('[name=csrfmiddlewaretoken]').value;
 const PALETA = ['#6c63ff','#22c55e','#f59e0b','#3b82f6','#ef4444','#ec4899',
@@ -292,7 +293,7 @@ const MODELO_INFO = {
 };
 
 const QTD_PADRAO = {{ qtd_ativos }};
-let estado = {risco:'medio', retorno:'medio', setores:[], qtd_ativos:QTD_PADRAO, horizonte:{{ horizonte_padrao }}};
+let estado = {risco:'{{ risco_padrao }}', retorno:'{{ retorno_padrao }}', setores:[], qtd_ativos:QTD_PADRAO, horizonte:{{ horizonte_padrao }}};
 let serieVisivel = {um_n:true, ibovespa:true, rf:true};
 const ajuda = t => `<span class="ajuda" tabindex="0">?<span class="dica">${t}</span></span>`;
 let dados = null;
@@ -381,7 +382,7 @@ function mostrarErro(msg){
 }
 
 // ── Renderização ──────────────────────────────────────────────
-const pct = v => (v>=0?'+':'') + (v*100).toFixed(1) + '%';
+const pct = v => (v>=0?'+':'') + fmtBR((v*100), 1) + '%';
 function renderizar(){
   document.getElementById('erro').style.display = 'none';
   const aviso = document.getElementById('aviso');
@@ -390,8 +391,8 @@ function renderizar(){
 
   const m = dados.metricas || {};
   document.getElementById('m-ret').textContent    = m.retorno      != null ? pct(m.retorno) : '—';
-  document.getElementById('m-vol').textContent    = m.volatilidade != null ? (m.volatilidade*100).toFixed(1)+'%' : '—';
-  document.getElementById('m-sharpe').textContent = m.sharpe       != null ? m.sharpe.toFixed(2) : '—';
+  document.getElementById('m-vol').textContent    = m.volatilidade != null ? fmtBR((m.volatilidade*100), 1)+'%' : '—';
+  document.getElementById('m-sharpe').textContent = m.sharpe       != null ? fmtBR(m.sharpe, 2) : '—';
   document.getElementById('m-var').textContent    = m.var95        != null ? pct(m.var95) : '—';
 
   renderDivisao();
@@ -418,13 +419,13 @@ function renderDivisao(){
   const el = document.getElementById('divisao');
   const rf = dados.pct_renda_fixa || 0, acoes = dados.pct_acoes ?? 100;
   const pm = dados.perda_max;
-  const limite = pm === null || pm === undefined ? 'perdas acima de 15% em 12 meses' : (pm === 0 ? 'nenhuma perda' : `perda de até ${(pm*100).toFixed(0)}% em 12 meses`);
+  const limite = pm === null || pm === undefined ? 'perdas acima de 15% em 12 meses' : (pm === 0 ? 'nenhuma perda' : `perda de até ${fmtBR((pm*100), 0)}% em 12 meses`);
   const ma = dados.metricas_acoes || {};
   el.innerHTML = `
-    <b>${rf.toFixed(0)}% em renda fixa</b> (Tesouro Selic / CDB 100% do CDI) e <b>${acoes.toFixed(0)}% em ações</b>.
+    <b>${fmtBR(rf, 0)}% em renda fixa</b> (Tesouro Selic / CDB 100% do CDI) e <b>${fmtBR(acoes, 0)}% em ações</b>.
     <div class="barra-rf"><div style="width:${rf}%;background:${COR_RF}"></div><div style="width:${acoes}%;background:var(--accent)"></div></div>
-    <span class="muted">No questionário você aceitou ${limite}. A parte em ações é a maior que mantém a perda provável
-    em 12 meses (95% de confiança) dentro desse limite${ma.volatilidade ? `, dada a volatilidade de ${(ma.volatilidade*100).toFixed(1)}% a.a. das ações` : ''}.
+    <span class="muted">Limite usado: ${limite} (o menor entre a perda que você aceitou no questionário e o teto do seu perfil). A parte em ações é a maior que mantém a perda provável
+    em 12 meses (95% de confiança) dentro desse limite${ma.volatilidade ? `, dada a volatilidade de ${fmtBR((ma.volatilidade*100), 1)}% a.a. das ações` : ''}.
     As ações escolhidas são as mesmas para todos do seu perfil; o que muda de pessoa para pessoa é essa proporção.</span>`;
   el.style.display = 'block';
 }
@@ -449,13 +450,15 @@ function renderPie(){
     inicio += fatia;
   });
   ctx.beginPath(); ctx.arc(100,100,36,0,Math.PI*2); ctx.fillStyle=getComputedStyle(document.documentElement).getPropertyValue('--surface').trim()||'#181c27'; ctx.fill();
-  document.getElementById('pie-qtd').textContent = ativos.filter(a=>a.tipo!=='renda_fixa').length;
+  const nAcoes = ativos.filter(a=>a.tipo!=='renda_fixa').length;
+  document.getElementById('pie-qtd').textContent = nAcoes;
+  document.getElementById('pie-lbl').textContent = nAcoes === 1 ? 'ação' : 'ações';
 
   const leg = document.getElementById('legend');
   leg.innerHTML = ativos.map((a,i)=>`
     <div class="leg-row" data-i="${i}">
       <div class="leg-dot" style="background:${corItem(a,i)}"></div>
-      <span class="leg-t">${a.ticker}</span><span class="leg-p">${a.pct.toFixed(1)}%</span>
+      <span class="leg-t">${a.ticker}</span><span class="leg-p">${fmtBR(a.pct, 1)}%</span>
     </div>`).join('');
   leg.querySelectorAll('.leg-row').forEach(el=>{
     el.onmouseenter = ()=>{ hoverIdx = +el.dataset.i; renderPie(); };
@@ -470,11 +473,11 @@ function renderTabela(){
     const cor = corItem(a,i);
     const barra = `<div style="display:flex;align-items:center;gap:8px">
         <div class="bar-wrap"><div class="bar-bg"><div class="bar-fill" style="width:${(a.pct/max*100).toFixed(0)}%;background:${cor}"></div></div></div>
-        <span style="font-weight:600;font-size:13px">${a.pct.toFixed(1)}%</span></div>`;
+        <span style="font-weight:600;font-size:13px">${fmtBR(a.pct, 1)}%</span></div>`;
     if (a.tipo === 'renda_fixa') {
       return `<tr><td class="ticker-cell" style="color:${cor}">${a.ticker}</td>
         <td style="color:var(--muted);font-size:12px">${a.setor}</td><td>${barra}</td>
-        <td colspan="2" style="color:var(--muted);font-size:12px">rende a Selic (${((dados.taxa_livre_risco||0)*100).toFixed(2)}% a.a.)</td></tr>`;
+        <td colspan="2" style="color:var(--muted);font-size:12px">rende a Selic (${fmtBR(((dados.taxa_livre_risco||0)*100), 2)}% a.a.)</td></tr>`;
     }
     const scCor = a.score>=65 ? 'var(--green)' : a.score>=50 ? 'var(--accent)' : 'var(--amber)';
     return `<tr>
@@ -518,8 +521,8 @@ function renderFronteira(){
   for (let k=0;k<=4;k++){
     const v=(vMin-mv)+k*((vMax+mv)-(vMin-mv))/4, r=(rMin-mr)+k*((rMax+mr)-(rMin-mr))/4;
     const dv = (vMax-vMin) < 0.04 ? 1 : 0, dr = (rMax-rMin) < 0.04 ? 1 : 0;
-    ctx.fillText((v*100).toFixed(dv)+'%', px(v), P.t+gH+14);
-    ctx.textAlign='right'; ctx.fillText((r*100).toFixed(dr)+'%', P.l-6, py(r)+3); ctx.textAlign='center';
+    ctx.fillText(fmtBR((v*100), dv)+'%', px(v), P.t+gH+14);
+    ctx.textAlign='right'; ctx.fillText(fmtBR((r*100), dr)+'%', P.l-6, py(r)+3); ctx.textAlign='center';
   }
   ctx.fillText('Volatilidade (a.a.)', P.l+gW/2, H-4);
 
@@ -612,7 +615,7 @@ function svgHistograma(e){
 const SERIES_CMP = [
   {id:'um_n', cor:'#22c55e', nome:'1/N (mesmas ações)', tracejado:'2 3'},
   {id:'ibovespa', cor:'#f59e0b', nome:'Ibovespa', tracejado:''},
-  {id:'rf', cor:'#64748b', nome:'Só renda fixa (Selic atual)', tracejado:'5 4'},
+  {id:'rf', cor:'#64748b', nome:'Só renda fixa (Selic de cada dia)', tracejado:'5 4'},
 ];
 function svgSerie(e){
   const s = e.serie, n = s.datas.length, W = 520, H = 250, P = {t:14, r:12, b:34, l:44};
@@ -652,7 +655,7 @@ const AJUDA_CMP = {
   carteira: 'A carteira recomendada, com os pesos de hoje aplicados a todo o período.',
   um_n: 'As mesmas ações com pesos iguais e a mesma parcela em renda fixa. Se a sua carteira não supera o 1/N, os pesos escolhidos pelo otimizador não estão agregando valor.',
   ibovespa: 'Principal índice da bolsa. É 100% ações, sem a parcela de renda fixa da sua carteira, por isso tende a oscilar mais.',
-  renda_fixa: 'Tesouro Selic / CDB 100% do CDI rendendo a Selic atual o período todo (simplificação).',
+  renda_fixa: 'Tesouro Selic / CDB 100% do CDI rendendo a Selic meta vigente em cada dia do período.',
 };
 const COR_CMP = {carteira:'#6c63ff', um_n:'#22c55e', ibovespa:'#f59e0b', renda_fixa:'#64748b'};
 function htmlComparacao(e){
@@ -750,7 +753,7 @@ function svgDispersao(v){
   const fx = x => P.l + (x - x0) / (x1 - x0) * (W - P.l - P.r);
   const fy = y => H - P.b - (y - y0) / (y1 - y0) * (H - P.t - P.b);
   const casas = Math.abs(x1 - x0) < 2 ? 2 : 1;
-  let g = eixoSVG(W, H, P, ticks(x0, x1), ticks(y0, y1, 5).map(y => [y, y.toFixed(0) + '%']), fx, fy,
+  let g = eixoSVG(W, H, P, ticks(x0, x1), ticks(y0, y1, 5).map(y => [y, fmtBR(y, 0) + '%']), fx, fy,
                   x => x.toFixed(casas).replace('.', ','));
   if (y0 < 0 && y1 > 0) g += `<line x1="${P.l}" x2="${W-P.r}" y1="${fy(0)}" y2="${fy(0)}" stroke="var(--axis)" stroke-dasharray="2 3"/>`;
   v.pontos.forEach(p => g += `<circle cx="${fx(p.x)}" cy="${fy(p.y)}" r="4" fill="#6c63ff" opacity=".7"><title>${p.mes}: ${v.rotulo} ${fmtN(p.x)} · carteira ${fmtN(p.y, 1)}%</title></circle>`);

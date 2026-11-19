@@ -24,7 +24,7 @@ from scoring.services.carteira import MODELO_MAP, RISCO_MAP
 from scoring.services.motor_scoring_v2 import PERFIS, calcular_scores_v2, selecionar_candidatos
 from users.models import PerfilRisco, User
 
-SETORES = ["Financeiro", "Energia", "Utilidade Pública", "Consumo", "Materiais Básicos"]
+SETORES = ["Tecnologia", "Energia", "Utilidade Pública", "Consumo", "Materiais Básicos"]
 N_ATIVOS = 30
 
 
@@ -133,7 +133,7 @@ class FluxoCompletoTests(TestCase):
 
     def test_paginas_do_usuario(self, _):
         self._usuario_com_perfil()
-        for nome in ("users:perfil", "users:quiz", "billing:upgrade", "scoring:carteira"):
+        for nome in ("users:perfil", "users:quiz", "scoring:carteira"):
             self.assertEqual(self.client.get(reverse(nome)).status_code, 200, nome)
 
     # ── otimização interativa ────────────────────────────────────────
@@ -189,7 +189,9 @@ class FluxoCompletoTests(TestCase):
         self.assertLessEqual(len(acoes), 3)
         self.assertTrue(all(a["setor"] in setores for a in acoes))
         self.assertEqual(d["qtd_ativos"], 3)
-        self.assertGreaterEqual(d["max_pct"], 100 / 3 - 0.1)      # teto sobe para 1/n
+        # 3 ações com teto de 15%: no máximo 45% em ações, o resto em renda fixa
+        self.assertTrue(all(a["pct"] <= 15.0 + 0.01 for a in acoes))
+        self.assertLessEqual(d["pct_acoes"], 45.0 + 0.01)
         self.assertEqual(self._otimizar(risco="medio", retorno="medio", qtd_ativos=99).status_code, 400)
         self.assertEqual(self._otimizar(risco="medio", retorno="medio", setores="Energia").status_code, 400)
 
@@ -524,6 +526,9 @@ class BacktestTests(TestCase):
         tickers = list(Ativo.objects.values_list("ticker", flat=True))
         precos = precos_simulados(tickers, anos=3)
         a = executar_backtest(precos, perfis=["intermediario"], reamostragens=50)
+        ot = a["perfis"]["intermediario"]["otimizacao"]
+        self.assertTrue(0 < ot["rebalanceamentos"] <= a["periodo"]["rebalanceamentos"])
+        self.assertLessEqual(ot["recurso_escore"], ot["rebalanceamentos"])
         primeira = sorted(a["perfis"]["intermediario"]["carteiras"]["combinada"])[0]
         corte = precos.index[precos.index.get_indexer([pd.Timestamp(primeira)])[0] - 1]
         alterado = precos.copy()
@@ -702,3 +707,40 @@ class PatrimonioEPaginasTests(TestCase):
         r = self.client.get(reverse("core:metodologia"))
         self.assertContains(r, "Nota técnica")
         self.assertContains(r, "Situação financeira")
+
+
+class AjustesAvaliacaoV16Tests(TestCase):
+    """Itens da avaliação do orientador (v16)."""
+
+    def test_perda_declarada_limitada_pelo_perfil(self):
+        from types import SimpleNamespace
+        from scoring.services.renda_fixa import perda_maxima_do_usuario
+        conserv = SimpleNamespace(tipo="conservador", respostas={"perda_max": 3})   # "mais de 15%"
+        self.assertEqual(perda_maxima_do_usuario(conserv, "conservador"), 0.05)
+        arroj = SimpleNamespace(tipo="arrojado", respostas={"perda_max": 1})        # "até 5%"
+        self.assertEqual(perda_maxima_do_usuario(arroj, "arrojado"), 0.05)
+        self.assertIsNone(perda_maxima_do_usuario(SimpleNamespace(tipo="arrojado", respostas={"perda_max": 3}),
+                                                  "arrojado"))
+
+    def test_poucas_acoes_resto_em_renda_fixa(self):
+        from scoring.services.renda_fixa import montar_carteira_completa
+        res = {"alocacao": {"AAAA3": 50.0, "BBBB3": 50.0}, "teto_acoes": 0.30,
+               "metricas": {"retorno": 0.15, "volatilidade": 0.20}}
+        c = montar_carteira_completa(res, None, 0.10)
+        self.assertAlmostEqual(c["pct_acoes"], 30.0)
+        self.assertTrue(all(i["pct"] <= 15.0 + 1e-9 for i in c["itens"] if i["tipo"] == "acao"))
+
+    def test_setor_financeiro(self):
+        from scoring.services.motor_scoring_v2 import eh_financeiro
+        self.assertTrue(eh_financeiro("Intermediários Financeiros - Bancos"))
+        self.assertTrue(eh_financeiro("Previdência e Seguros"))
+        self.assertFalse(eh_financeiro("Energia Elétrica"))
+
+    def test_escore_macro_usa_ibc_e_ipca_12m(self):
+        from types import SimpleNamespace
+        from scoring.services.motor_scoring_v2 import calcular_score_macro
+        base = dict(selic=4, ipca_mensal=None, pib_trimestral=None, desemprego=8)
+        m = SimpleNamespace(**base, ipca_12m=3.0, ibc_br_12m=2.0)
+        self.assertEqual(calcular_score_macro(m), 60.0)            # 50 + 5*2
+        m = SimpleNamespace(**base, ipca_12m=5.0, ibc_br_12m=-1.0)
+        self.assertEqual(calcular_score_macro(m), 50 - 6 - 3)

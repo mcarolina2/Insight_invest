@@ -48,5 +48,11 @@ def macro_consolidado(data_ref: date | None = None):
             acum *= 1 + float(v) / 100
         ipca_12m = round((acum - 1) * 100, 2)
 
+    # Atividade: variação do IBC-Br (dessazonalizado, SGS 24364) em 12 meses
+    ibc = list(qs.exclude(ibc_br__isnull=True).order_by("-data_ref").values("data_ref", "ibc_br")[:13])
+    ibc_br_12m = None
+    if len(ibc) == 13 and float(ibc[12]["ibc_br"]) > 0:
+        ibc_br_12m = round((float(ibc[0]["ibc_br"]) / float(ibc[12]["ibc_br"]) - 1) * 100, 2)
+
     return SimpleNamespace(id=ultima.id, data_ref=ultima.data_ref, datas=datas,
-                           ipca_12m=ipca_12m, **valores)
+                           ipca_12m=ipca_12m, ibc_br_12m=ibc_br_12m, **valores)

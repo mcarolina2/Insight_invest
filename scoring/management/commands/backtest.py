@@ -150,7 +150,8 @@ class Command(BaseCommand):
                   "hipoteses_custo_0,10%": self._hipoteses(res, df, dt),
                   "camada_macro": {p: {"jaccard_medio_com_vs_sem_macro": r["camada_macro"]["jaccard_medio"]}
                                    for p, r in res["perfis"].items()},
-                  "n_ativos_medio": {p: r["n_ativos_medio"] for p, r in res["perfis"].items()}}
+                  "n_ativos_medio": {p: r["n_ativos_medio"] for p, r in res["perfis"].items()},
+                  "otimizacao_combinada": {p: r.get("otimizacao") for p, r in res["perfis"].items()}}
         (destino / "resumo.json").write_text(json.dumps(resumo, ensure_ascii=False, indent=2, default=str))
         (destino / "tabela_backtest.tex").write_text(self._latex(res, df, dt), encoding="utf-8")
         dp = self._patrimonio(res)
@@ -270,5 +271,10 @@ class Command(BaseCommand):
             cm = rp["camada_macro"]["jaccard_medio"]
             if cm is not None:
                 self.stdout.write(f"Seleção com x sem camada macro (Jaccard médio): {cm:.2f}")
+            ot = rp.get("otimizacao") or {}
+            if ot.get("rebalanceamentos"):
+                self.stdout.write(f"Combinada: recurso à alocação por escore em {ot['recurso_escore']} de "
+                                  f"{ot['rebalanceamentos']} rebalanceamentos; em média {ot['pesos_no_teto_medio']} "
+                                  f"de {ot['acoes_medio']} ações no teto por ação.")
         self.stdout.write(self.style.MIGRATE_HEADING("\nHipóteses (custo de 0,10%, nível de 5%)"))
         self.stdout.write(json.dumps(self._resumo["hipoteses_custo_0,10%"], ensure_ascii=False, indent=2))

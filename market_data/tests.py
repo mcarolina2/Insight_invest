@@ -27,6 +27,22 @@ class EscalaCVMTests(SimpleTestCase):
         cresc = ind.crescimento_yoy(*dre["receita_liquida"].iloc[::-1])
         self.assertAlmostEqual(cresc, 0.10)          # antes da correção: 1099,0 (109.900%)
 
+    def test_banco_patrimonio_e_lucro_pela_descricao(self):
+        """Plano de contas de banco: PL na 2.07 e lucro na 3.09, não 2.03/3.11."""
+        from services.extractors.cvm_extractor import CONTAS_BP_PASSIVO, CONTAS_DRE
+        base = {"CNPJ_CIA": "1", "DENOM_CIA": "BANCO", "DT_REFER": "2025-12-31", "VERSAO": 1,
+                "ORDEM_EXERC": "ÚLTIMO", "ESCALA_MOEDA": "MIL"}
+        bpp = pd.DataFrame([
+            {**base, "CD_CONTA": "2.03", "DS_CONTA": "Provisões", "VL_CONTA": 5},
+            {**base, "CD_CONTA": "2.07", "DS_CONTA": "Patrimônio Líquido Consolidado", "VL_CONTA": 200},
+        ])
+        self.assertEqual(filtrar_contas(bpp, CONTAS_BP_PASSIVO)["patrimonio_liquido"].iloc[0], 200_000)
+        dre = pd.DataFrame([
+            {**base, "CD_CONTA": "3.01", "DS_CONTA": "Receitas da Intermediação Financeira", "VL_CONTA": 900},
+            {**base, "CD_CONTA": "3.09", "DS_CONTA": "Lucro ou Prejuízo Líquido Consolidado do Período", "VL_CONTA": 40},
+        ])
+        self.assertEqual(filtrar_contas(dre, CONTAS_DRE)["lucro_liquido"].iloc[0], 40_000)
+
     def test_arquivo_sem_coluna_de_escala_continua_funcionando(self):
         df = pd.DataFrame(_linhas_dre("1", "2024-12-31", "UNIDADE", 500, 50)).drop(columns="ESCALA_MOEDA")
         self.assertEqual(float(filtrar_contas(df, CONTAS_DRE)["receita_liquida"].iloc[0]), 500)
@@ -112,6 +128,20 @@ class CorrigirTickersTests(TestCase):
         self.assertEqual(Ativo.objects.get(ticker="WEGE3").cnpj, "84.429.695/0001-11")
         self.assertFalse(Ativo.objects.get(ticker="FECH3").ativo)
 
+    def test_cria_companhia_do_fca_ausente_da_base(self):
+        from io import StringIO
+        from unittest.mock import patch
+        import pandas as pd
+        from portfolio.models import Ativo
+        Ativo.objects.create(ticker="WEGE3", nome="WEG", tipo="acao", cnpj="84.429.695/0001-11")
+        cad = pd.DataFrame({"cnpj": ["60.872.504/0001-23"], "setor": ["Bancos"]})
+        with patch("services.extractors.b3_extractor.buscar_cnpj_cvm", return_value=cad):
+            call_command("corrigir_tickers", "--arquivo", self._fca(), "--aplicar", stdout=StringIO())
+        itub = Ativo.objects.get(ticker="ITUB4")
+        self.assertEqual(itub.cnpj, "60.872.504/0001-23")
+        self.assertEqual(itub.setor, "Bancos")
+        self.assertTrue(itub.ativo)
+
 
 class EstatisticoLoteTests(SimpleTestCase):
     """Um ticker vazio no lote não pode apagar os dados dos outros."""
@@ -128,3 +158,39 @@ class EstatisticoLoteTests(SimpleTestCase):
         self.assertEqual(r["VALE3"].dropna().size, 299)
         self.assertEqual(r["NOVA3"].dropna().size, 99)
         self.assertNotIn("MORTA3", r.columns)
+
+
+class ConferirPrecosTests(TestCase):
+    """Leitura do COTAHIST (layout posicional da B3) e comparação com o Yahoo."""
+
+    @staticmethod
+    def _linha(data, ticker, preco):
+        l = [" "] * 245
+        def pos(ini, fim, txt):
+            l[ini - 1:fim] = list(str(txt).ljust(fim - ini + 1)[:fim - ini + 1])
+        pos(1, 2, "01"); pos(3, 10, data); pos(11, 12, "02"); pos(13, 24, ticker); pos(25, 27, "010")
+        pos(109, 121, f"{round(preco * 100):013d}"); pos(171, 188, f"{100000000:018d}"); pos(211, 217, "0000001")
+        return "".join(l) + "\n"
+
+    def test_le_cotahist_e_aponta_divergencia(self):
+        import io, tempfile, os
+        from unittest.mock import patch
+        import pandas as pd
+        from django.core.management import call_command
+        from market_data.management.commands.conferir_precos import ler_cotahist
+        from portfolio.models import Ativo
+        Ativo.objects.create(ticker="ABCD3", nome="Abcd", tipo="acao", ativo=True)
+        conteudo = "00HEADER\n" + self._linha("20261023", "ABCD3", 10.0) + self._linha("20261026", "ABCD3", 9.5)
+        with tempfile.NamedTemporaryFile("w", suffix=".TXT", delete=False, encoding="latin-1") as f:
+            f.write(conteudo)
+        try:
+            df = ler_cotahist(f.name)
+            self.assertEqual(list(df["fechamento"]), [10.0, 9.5])
+            yahoo = pd.DataFrame({"ABCD3": [10.0, 5.5]}, index=pd.to_datetime(["2026-10-23", "2026-10-26"]))
+            saida = io.StringIO()
+            with patch("services.calculators.estatistico.baixar_precos", return_value=yahoo):
+                call_command("conferir_precos", "--arquivo", f.name, "--datas", "2026-10-26", stdout=saida)
+            self.assertIn("ABCD3", saida.getvalue())
+            self.assertIn("-45.00%", saida.getvalue())
+        finally:
+            os.unlink(f.name)

@@ -17,6 +17,8 @@
 </div>
 {% if resultados|length == 30 %}<p class="muted">Mostrando os 30 primeiros. Refine a busca.</p>{% endif %}
 {% else %}
-<div class="card"><p>Nenhum ativo encontrado. Tente o código de negociação (ex.: PETR4) ou parte do nome da empresa.</p></div>
+<div class="card"><p>Nenhum ativo encontrado. Tente o código de negociação (ex.: PETR4) ou parte do nome da empresa.</p>
+{% if sugestoes %}<p>Você quis dizer: {% for t in sugestoes %}<a href="{% url 'core:ativo' t %}">{{ t }}</a>{% if not forloop.last %}, {% endif %}{% endfor %}?</p>{% endif %}
+</div>
 {% endif %}
 {% endblock %}

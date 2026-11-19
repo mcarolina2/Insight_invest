@@ -31,11 +31,29 @@ NOME_RENDA_FIXA = "Renda fixa"
 DESCRICAO_RENDA_FIXA = "Tesouro Selic / CDB 100% do CDI"
 
 
+def _mais_restritiva(a, b):
+    """Menor das duas perdas máximas (None = sem limite)."""
+    if a is None:
+        return b
+    if b is None:
+        return a
+    return min(a, b)
+
+
 def perda_maxima_do_usuario(perfil_obj=None, perfil: str | None = None):
-    """Perda máxima declarada no quiz; sem resposta, usa a referência do perfil."""
+    """
+    Perda máxima usada na divisão ações/renda fixa: a MAIS RESTRITIVA entre a
+    resposta do quiz e o teto do perfil. Assim um investidor classificado como
+    conservador que marcou "mais de 15%" continua com no máximo 5% de perda
+    estimada (adequação: Resolução CVM 30/2021, art. 2º), e um arrojado que
+    marcou "até 5%" tem a própria declaração respeitada.
+    """
+    perfil = perfil or getattr(perfil_obj, "tipo", None)
+    teto_perfil = PERDA_MAX_POR_PERFIL.get(perfil, 0.15)
     if perfil_obj is not None and "perda_max" in (perfil_obj.respostas or {}):
-        return PERDA_MAX_POR_RESPOSTA.get(int(perfil_obj.respostas["perda_max"]))
-    return PERDA_MAX_POR_PERFIL.get(perfil or getattr(perfil_obj, "tipo", None), 0.15)
+        declarada = PERDA_MAX_POR_RESPOSTA.get(int(perfil_obj.respostas["perda_max"]))
+        return _mais_restritiva(declarada, teto_perfil)
+    return teto_perfil
 
 
 def parcela_em_acoes(volatilidade_acoes: float | None, perda_max: float | None) -> float:
@@ -72,6 +90,7 @@ def montar_carteira_completa(res_acoes: dict, perda_max, rf: float) -> dict:
     carteira completa, com a renda fixa como primeiro item.
     """
     w = parcela_em_acoes(res_acoes.get("metricas", {}).get("volatilidade"), perda_max)
+    w = min(w, float(res_acoes.get("teto_acoes", 1.0)))   # poucas ações: resto em renda fixa
     itens = []
     if w < 1:
         itens.append({"ticker": NOME_RENDA_FIXA, "tipo": "renda_fixa",

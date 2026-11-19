@@ -28,6 +28,14 @@ MODELO_MAP = {
     ("alto", "alto"):   "score",
 }
 
+# Filtros (risco, retorno) padrão de cada perfil: os mesmos na carteira
+# interativa (posição inicial), nas carteiras de referência da home e no backtest.
+FILTROS_POR_PERFIL = {
+    "conservador": ("baixo", "baixo"),      # paridade de risco, vol <= 12%
+    "intermediario": ("medio", "medio"),    # máximo Sharpe com vol <= 20%
+    "arrojado": ("alto", "alto"),           # alocação por escore
+}
+
 TAXA_LIVRE_RISCO_PADRAO = 0.10
 
 
@@ -206,6 +214,14 @@ def montar_carteira_otimizada(
     if pouca_liq:
         notas.append(f"Pouca negociação, abaixo de {_fmt_reais(settings.LIQUIDEZ_MINIMA_DIARIA)}/dia "
                      "(substituídos): " + ", ".join(pouca_liq) + ".")
+    # Poucas ações (ex.: filtro de um setor com 2 empresas): em vez de subir o teto
+    # por ativo para 1/n (até 100% numa ação só), a parte das ações fica limitada a
+    # n x teto e o restante vai para a renda fixa (ver montar_carteira_completa).
+    teto_acoes = min(1.0, len(candidatos) * w_max)
+    if teto_acoes < 1:
+        notas.append(f"Só {len(candidatos)} ações atendem aos filtros escolhidos; com o teto de "
+                     f"{w_max * 100:.0f}% por ação, no máximo {teto_acoes * 100:.0f}% fica em ações "
+                     "e o restante vai para a renda fixa.")
     for nota in notas:
         aviso = f"{aviso} {nota}" if aviso else nota
 
@@ -218,8 +234,11 @@ def montar_carteira_otimizada(
         "fronteira": res.fronteira,
         "precos": precos,          # usado pela análise estatística/macro (não vai para o JSON)
         "qtd_ativos": int(qtd_ativos or config_perfil(perfil)["qtd_ativos"]),
-        # teto efetivo: com poucas ações o otimizador sobe o teto para 1/n (soma = 100%)
+        # teto por ação DENTRO da parte em ações (com poucas ações sobe para 1/n,
+        # mas a parte em ações fica limitada a teto_acoes: na carteira completa
+        # nenhuma ação passa de max_pct_ativo)
         "max_pct": round(max(w_max, 1 / max(len(candidatos), 1)) * 100, 1),
+        "teto_acoes": round(teto_acoes, 4),
     }
 
 
@@ -237,8 +256,13 @@ def recalcular_carteiras(perfis=None) -> dict:
     resultado = {}
     for perfil in perfis or list(obter_perfis()):
         df = calcular_scores_v2(perfil)
+        risco, retorno = FILTROS_POR_PERFIL.get(perfil, ("medio", "medio"))
         try:
-            res = montar_carteira_otimizada(df, perfil, modelo="sharpe", calcular_fronteira=False)
+            # mesmo modelo e mesmos limites do backtest (seção Desempenho do modelo)
+            res = montar_carteira_otimizada(df, perfil, modelo=MODELO_MAP[(risco, retorno)],
+                                            retorno_alvo=RETORNO_MAP[retorno],
+                                            volatilidade_maxima=RISCO_MAP[risco],
+                                            calcular_fronteira=False)
         except CarteiraVazia as e:
             resultado[perfil] = f"sem carteira: {e}"
             continue

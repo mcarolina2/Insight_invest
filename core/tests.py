@@ -38,7 +38,7 @@ class PaginaAtivoTests(TestCase):
         self.assertEqual(r.status_code, 200)
         self.assertContains(r, "Entra na carteira deste perfil")
         self.assertContains(r, "Preço ajustado")               # gráfico com preços simulados
-        self.assertContains(r, "Posição 1 de")
+        self.assertContains(r, "Posição 1 entre")
 
     def test_ativo_sem_dfp_explica_o_motivo(self, _):
         self.assertContains(self.client.get(reverse("core:ativo", args=["SEMD3"])),
@@ -53,7 +53,7 @@ class PaginaAtivoTests(TestCase):
         PerfilRisco.objects.create(user=u, tipo="conservador", pontuacao=3)
         self.client.force_login(u)
         self.assertContains(self.client.get(reverse("core:ativo", args=["TST003"])),
-                            "Não passa nos filtros do perfil: liquidez corrente 0.40x")
+                            "Não passa nos filtros do perfil: liquidez corrente 0,40x")
 
     def test_ticker_minusculo_redireciona_e_inexistente_404(self, _):
         self.assertRedirects(self.client.get(reverse("core:ativo", args=["tst003"])),
@@ -63,7 +63,8 @@ class PaginaAtivoTests(TestCase):
     def test_busca(self, _):
         url = reverse("core:buscar_ativo")
         self.assertRedirects(self.client.get(url, {"q": "tst003"}), reverse("core:ativo", args=["TST003"]))
-        self.assertRedirects(self.client.get(url, {"q": "Logístico"}), reverse("core:ativo", args=["HGLG11"]))
+        # nome: lista (só o ticker exato redireciona), sem diferenciar acentos
+        self.assertContains(self.client.get(url, {"q": "logistico"}), "HGLG11")
         r = self.client.get(url, {"q": "Empresa"})
         self.assertContains(r, "TST013")
         self.assertContains(self.client.get(url, {"q": "zzzz"}), "Nenhum ativo encontrado")

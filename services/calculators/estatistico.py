@@ -195,6 +195,8 @@ def calcular_estatisticas_ativo(
 
     # Coeficiente de Variação: risco relativo ao retorno
     cv = abs(dp / media_ret) if media_ret != 0 else None
+    if cv is not None and cv >= 9999:      # média ~ 0: CV sem sentido e estoura o campo (10^4)
+        cv = None
 
     # ── Distribuição (fBasics no R) ───────────────────────────────────
     skew_val  = float(stats.skew(r))               # scipy.stats.skew

@@ -23,6 +23,11 @@
   td[title]{cursor:help}
   .perfis-linha{display:flex;justify-content:space-between;gap:12px;padding:8px 0;border-bottom:1px solid var(--border);font-size:13px}
   .perfis-linha:last-child{border:none}
+  .dims{display:grid;gap:6px;margin:0 0 10px}
+  .dim{display:grid;grid-template-columns:110px 1fr 32px;gap:8px;align-items:center;font-size:12px}
+  .dim .barra{height:6px;background:var(--surface2);border-radius:3px;overflow:hidden}
+  .dim .barra i{display:block;height:100%;background:var(--accent,#3b82f6)}
+  .dim b{text-align:right}
   .ok{color:#22c55e}.no{color:var(--muted)}
   .pos{color:#22c55e}.neg{color:var(--red)}
 {% endblock %}
@@ -45,8 +50,10 @@
 
 {% if grafico %}
 <div class="card">
-  <h2>Preço ajustado — últimos 12 meses</h2>
-  <canvas id="grafico" width="1000" height="220" style="width:100%"></canvas>
+  <h2>Preço ajustado — últimos 12 meses <span class="muted">(Yahoo Finance, até {{ grafico.fim }})</span></h2>
+  <canvas id="grafico" width="1000" height="220" style="width:100%" role="img"
+          aria-label="Preço de {{ ativo.ticker }} em 12 meses: variação de {{ grafico.variacao|floatformat:1 }}%, mínima de R$ {{ grafico.minimo|floatformat:2 }} e máxima de R$ {{ grafico.maximo|floatformat:2 }}."></canvas>
+  <p class="muted" style="margin:6px 0 0">Mínima de R$ {{ grafico.minimo|floatformat:2 }} e máxima de R$ {{ grafico.maximo|floatformat:2 }} no período. O preço do dia pode ser mais recente que as estatísticas abaixo.</p>
 </div>
 {% endif %}
 
@@ -61,7 +68,12 @@
         <div class="escore"><div class="n">{{ s.scores.score_estat|floatformat:0 }}</div><div class="r">Estatístico</div></div>
         <div class="escore"><div class="n">{{ s.scores.score_macro|floatformat:0 }}</div><div class="r">Macro</div></div>
       </div>
-      <p class="muted" style="margin:0 0 10px">Posição {{ s.posicao }} de {{ s.total }} ativos avaliados. Escores de 0 a 100, relativos aos demais ativos.</p>
+      {% if s.dimensoes %}
+      <div class="dims">
+        {% for d in s.dimensoes %}<div class="dim"><span>{{ d.nome }}</span><div class="barra"><i style="width:{{ d.valor }}%"></i></div><b>{{ d.valor }}</b></div>{% endfor %}
+      </div>
+      {% endif %}
+      <p class="muted" style="margin:0 0 10px">Posição {{ s.posicao }} entre {{ s.total }} ativos elegíveis (universo investível que passa nos filtros do perfil). Escores de 0 a 100 são percentis: 70 significa melhor que 70% desses ativos.</p>
     {% endif %}
     <div class="status {% if s.entra %}sim{% else %}nao{% endif %}">{% if s.entra %}✓ Entra na carteira deste perfil. {% endif %}{{ s.motivo }}</div>
     {% if not perfil_usuario %}<p class="muted" style="margin-top:10px"><a href="{% url 'users:registro' %}">Crie uma conta</a> para ver o escore no seu perfil.</p>{% endif %}
@@ -79,7 +91,7 @@
       </div>
     {% endfor %}
     {% if nas_carteiras %}
-      <p class="muted" style="margin:12px 0 0">Na carteira recomendada da página inicial:
+      <p class="muted" style="margin:12px 0 0">Na carteira teórica de referência da página inicial:
         {% for c in nas_carteiras %}{{ c.perfil }} ({{ c.pct|floatformat:1 }}%){% if not forloop.last %}, {% endif %}{% endfor %}.</p>
     {% endif %}
   </div>
@@ -87,12 +99,13 @@
 
 <div class="card">
   <h2>Indicadores fundamentalistas {% if data_dfp %}<span class="muted">(DFP — exercícios encerrados)</span>{% endif %}</h2>
+  {% if financeiro %}<p class="muted">Instituição financeira: liquidez, margens e dívida/EBITDA não se aplicam ao balanço de bancos e seguradoras e ficam neutros no escore.</p>{% endif %}
   {% if fundamentos %}
   <table>
     <thead><tr><th>Indicador</th>{% for a in anos_dfp %}<th>{{ a }}</th>{% endfor %}</tr></thead>
     <tbody>
     {% for f in fundamentos %}
-      <tr><td title="{{ f.explicacao }}">{{ f.rotulo }} ⓘ</td>{% for v in f.valores %}<td>{{ v }}</td>{% endfor %}</tr>
+      <tr><td>{{ f.rotulo }} <span class="ajuda" tabindex="0" aria-label="{{ f.explicacao }}">?<span class="dica">{{ f.explicacao }}</span></span></td>{% for v in f.valores %}<td>{{ v }}</td>{% endfor %}</tr>
     {% endfor %}
     </tbody>
   </table>
@@ -106,25 +119,38 @@
     <h2>Estatísticas dos retornos {% if data_estat %}<span class="muted">({{ data_estat|date:"d/m/Y" }})</span>{% endif %}</h2>
     {% if estatisticas %}
     <table><tbody>
-      {% for e in estatisticas %}<tr><td title="{{ e.explicacao }}">{{ e.rotulo }} ⓘ</td><td>{{ e.valor }}</td></tr>{% endfor %}
+      {% for e in estatisticas %}<tr><td>{{ e.rotulo }} <span class="ajuda" tabindex="0" aria-label="{{ e.explicacao }}">?<span class="dica">{{ e.explicacao }}</span></span></td><td>{{ e.valor }}</td></tr>{% endfor %}
     </tbody></table>
     {% else %}<p class="muted">Sem estatísticas calculadas.</p>{% endif %}
   </div>
   <div class="card">
-    <h2>Mercado {% if data_mercado %}<span class="muted">({{ data_mercado|date:"d/m/Y" }})</span>{% endif %}</h2>
+    <h2>Liquidez {% if data_estat %}<span class="muted">(126 pregões até {{ data_estat|date:"d/m/Y" }})</span>{% endif %}</h2>
+    {% if liquidez %}
+    <table><tbody>
+      <tr><td>Volume mediano <span class="ajuda" tabindex="0">?<span class="dica">Mediana do volume financeiro negociado por dia nos últimos 126 pregões.</span></span></td><td>{{ liquidez.volume }}</td></tr>
+      <tr><td>Pregões com negócio <span class="ajuda" tabindex="0">?<span class="dica">Fração dos últimos 126 pregões em que houve ao menos um negócio.</span></span></td><td>{{ liquidez.pregoes }}</td></tr>
+      <tr><td>Pregões na janela estatística</td><td>{{ liquidez.observacoes|default:"—" }}</td></tr>
+      <tr><td>Mínimo exigido</td><td>R$ {{ liquidez.minimo_volume }} mi/dia e {{ liquidez.minimo_pregoes }}% dos pregões</td></tr>
+    </tbody></table>
+    {% if liquidez.elegivel is not None %}
+    <div class="status {% if liquidez.elegivel %}sim{% else %}nao{% endif %}" style="margin-top:10px">{% if liquidez.elegivel %}✓ Dentro do universo investível.{% else %}Fora do universo investível: não entra no escore, nos rankings nem nas carteiras.{% endif %}</div>
+    {% endif %}
+    {% else %}<p class="muted">Sem cotações suficientes para medir a liquidez.</p>{% endif %}
     {% if mercado %}
+    <h2 style="margin-top:16px">Mercado <span class="muted">({{ data_mercado|date:"d/m/Y" }})</span></h2>
     <table><tbody>
       {% for rot, val in mercado %}<tr><td>{{ rot }}</td><td>{{ val }}</td></tr>{% endfor %}
     </tbody></table>
-    {% else %}<p class="muted">Sem dados de mercado.</p>{% endif %}
+    {% endif %}
   </div>
 </div>
-<p class="muted">Passe o mouse sobre ⓘ para ver o que cada indicador significa.</p>
+<p class="muted">Toque ou passe o mouse sobre <b>?</b> para ver o que cada indicador significa. Fontes: demonstrações financeiras padronizadas (DFP) da CVM; preços ajustados do Yahoo Finance.</p>
 {% endblock %}
 
 {% block script %}
 {% if grafico_json %}
 <script>
+const fmtBR = (v, c=1) => Number(v).toLocaleString('pt-BR', {minimumFractionDigits: c, maximumFractionDigits: c});
 function desenharPreco(){
   const g = {{ grafico_json|safe }};
   const c = document.getElementById('grafico'), ctx = c.getContext('2d');
@@ -138,7 +164,7 @@ function desenharPreco(){
   for (let k=0; k<=4; k++){
     const v = (min-m) + k*((max+m)-(min-m))/4;
     ctx.beginPath(); ctx.moveTo(P.l, y(v)); ctx.lineTo(W-P.r, y(v)); ctx.stroke();
-    ctx.fillText('R$ '+v.toFixed(2), P.l-6, y(v)+4);
+    ctx.fillText('R$ '+fmtBR(v, 2), P.l-6, y(v)+4);
   }
   ctx.textAlign = 'center';
   [[0,'left'], [Math.floor(g.datas.length/2),'center'], [g.datas.length-1,'right']].forEach(([i,al]) => {

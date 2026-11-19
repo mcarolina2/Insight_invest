@@ -79,6 +79,17 @@ class Command(BaseCommand):
             else:
                 g["fora"].append(a)              # sem CNPJ e fora do FCA (FII, BDR, ETF...)
 
+        # Companhias do FCA sem NENHUM ativo na base (ex.: BBAS3, SUZB3, RENT3):
+        # a carga antiga dependia da API da B3 e deixou várias de fora.
+        cnpjs_na_base = {so_digitos(a.cnpj) for a in existentes.values() if a.cnpj}
+        nome_fca = dict(zip(fca["cnpj_digitos"], fca["nome"]))
+        novas = {}                                   # ticker -> cnpj (dígitos)
+        for dig, tks in tickers_da_empresa.items():
+            if dig not in cnpjs_na_base:
+                for t in tks:
+                    if t not in existentes:
+                        novas[t] = dig
+
         def amostra(lista, fmt):
             itens = [fmt(x) for x in lista[:mostrar]]
             return ", ".join(itens) + (" ..." if len(lista) > mostrar else "")
@@ -93,6 +104,10 @@ class Command(BaseCommand):
             self.stdout.write("     " + amostra(g["inventado"], lambda a: (
                 f"{a.ticker}→{'/'.join(tickers_da_empresa[so_digitos(a.cnpj)])}")))
         self.stdout.write(f"  Tickers verdadeiros a criar              : {len(criar)}")
+        self.stdout.write(f"  Companhias do FCA ausentes da base       : {len({d for d in novas.values()})} "
+                          f"({len(novas)} tickers)")
+        if novas:
+            self.stdout.write("     " + amostra(sorted(novas), lambda t: t))
         self.stdout.write(f"  Empresas sem ação negociada em bolsa     : {len(g['sem_negociacao'])}")
         if g["sem_negociacao"]:
             self.stdout.write("     " + amostra(g["sem_negociacao"], lambda a: f"{a.ticker} ({a.nome[:25]})"))
@@ -130,7 +145,21 @@ class Command(BaseCommand):
                     removidos += 1
             Ativo.objects.filter(id__in=[a.id for a in g["sem_negociacao"]]).update(ativo=False)
 
+            if novas:
+                setor_cvm = {}
+                try:
+                    from services.extractors.b3_extractor import buscar_cnpj_cvm
+                    cad = buscar_cnpj_cvm()
+                    setor_cvm = {so_digitos(c): s for c, s in zip(cad["cnpj"], cad["setor"])}
+                except Exception as e:
+                    self.stdout.write(self.style.WARNING(f"  Cadastro da CVM indisponível ({e}); setores ficam vazios."))
+                from services.setores import limpar_setor, reparar_mojibake
+                for t, dig in novas.items():
+                    Ativo.objects.create(ticker=t, nome=reparar_mojibake(nome_fca.get(dig, t))[:200],
+                                         setor=limpar_setor(setor_cvm.get(dig, "")),
+                                         tipo=_tipo(t), cnpj=cnpj_formatado[dig], ativo=True)
+
         self.stdout.write(self.style.SUCCESS(
-            f"\nCorrigido: {len(g['cnpj_corrigido'])} CNPJs, {len(criar)} tickers criados, "
+            f"\nCorrigido: {len(g['cnpj_corrigido'])} CNPJs, {len(criar) + len(novas)} tickers criados, "
             f"{removidos} inventados removidos, {len(g['sem_negociacao'])} empresas inativadas."))
         self.stdout.write("Agora rode: load_cvm_data --force, load_estatistico, calcular_scores, atualizar_carteiras")

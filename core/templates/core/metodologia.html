@@ -158,17 +158,24 @@ os percentis são somados com pesos. O escore é relativo: 70 quer dizer que a a
 </figure>
 <div class="como-ler"><b>Como ler:</b> o ROE de −1.100% e o de 272% existem na base (empresas com patrimônio muito pequeno).
 Com o percentil, cada um conta só pela posição: o caso extremo não "puxa" a escala e não distorce a nota das demais.
-Indicador sem dado recebe 50 (neutro).</div>
+Indicador sem dado recebe 50 (neutro).
+O percentil é calculado só entre as ações do <b>universo investível</b> (com cotação em pelo menos 90% dos pregões do último ano
+e liquidez mínima de R$ {{ liquidez_min|floatformat:0 }} mi/dia em {{ pregoes_min }}% dos pregões): uma ação quase sem negócios
+não "empurra" as demais para cima nem ocupa o topo da camada estatística com volatilidade artificialmente baixa.</div>
 
 <h3>As três camadas</h3>
 <table>
   <tr><th>Camada</th><th>O que entra</th><th>Melhor quando</th></tr>
   <tr><td>Fundamentalista</td><td><b>Liquidez</b> (corrente, seca, imediata, geral) · <b>Rentabilidade</b> (ROE, ROA, margens, giro) ·
-      <b>Endividamento</b> (dívida líquida ÷ EBITDA) · <b>Crescimento</b> (receita e lucro)</td><td>maior; dívida, menor</td></tr>
+      <b>Endividamento</b> (dívida líquida ÷ EBITDA, com EBITDA = resultado operacional + depreciação e amortização da DFC) · <b>Crescimento</b> (receita e lucro)<br>
+      <small>Bancos e seguradoras: liquidez, margens, giro e dívida/EBITDA não se aplicam e ficam neutros (50); os filtros de liquidez e dívida também não valem para eles.</small></td><td>maior; dívida, menor</td></tr>
   <tr><td>Estatística (último ano de preços)</td><td>Volatilidade · beta (perto de 0,7 no conservador e de 1 nos demais) ·
       retorno médio ÷ desvio padrão · bônus por assimetria positiva · bônus por normalidade (só conservador)</td><td>mais estável</td></tr>
-  <tr><td>Macroeconômica</td><td>Selic, inflação, PIB e desemprego em relação a patamares de referência</td><td>cenário melhor</td></tr>
+  <tr><td>Macroeconômica</td><td>Selic, inflação em 12 meses, atividade (IBC-Br em 12 meses) e desemprego em relação a patamares de referência</td><td>cenário melhor</td></tr>
 </table>
+<div class="formula">Macro = 50 − 2·máx(0; Selic − 4) − 3·máx(0; IPCA<sub>12m</sub> − 3) + (5·A se A &gt; 0; senão 3·A) − 1,5·máx(0; Desemprego − 8), limitado a 0–100</div>
+<p class="muted">A = variação do IBC-Br dessazonalizado (série 24364 do Banco Central) em 12 meses; na falta, variação anual do PIB.
+Selic e desemprego em % (Selic meta e PNAD contínua).</p>
 <p>A camada macroeconômica é igual para todas as ações numa mesma data: ela muda o nível do escore, não a ordem entre as ações.</p>
 <div class="formula">Escore final = peso<sub>F</sub> × Fundamentalista + peso<sub>M</sub> × Macro + peso<sub>E</sub> × Estatístico</div>
 </section>
@@ -207,7 +214,8 @@ Os detalhes estão em <a href="{% url 'core:desempenho' %}">Desempenho do modelo
 <div class="resumo"><b>Em resumo:</b> as ações são percorridas do maior para o menor escore, e só entram as que têm preço,
 negociação suficiente e não repetem empresa.</div>
 <ul>
-  <li><b>Filtros de balanço por perfil:</b> {% for p in perfis %}{{ p.nome }}: {{ p.filtros }}{% if not forloop.last %} · {% endif %}{% endfor %}.</li>
+  <li><b>Filtros de balanço por perfil:</b> {% for p in perfis %}{{ p.nome }}: {{ p.filtros }}{% if not forloop.last %} · {% endif %}{% endfor %}.
+      Indicador ausente reprova o filtro (no escore ele vale 50, neutro); bancos e seguradoras não passam pelos filtros de liquidez e dívida.</li>
   <li><b>Histórico:</b> pelo menos 252 pregões (cerca de um ano) de preços.</li>
   <li><b>Liquidez:</b> volume mediano de pelo menos R$ {{ liquidez_min|floatformat:1 }} milhão por dia nos últimos 126 pregões
       e negócios em pelo menos {{ pregoes_min }}% desses dias. Ação quase sem negócio repete o preço dia após dia, parece ter risco
@@ -221,7 +229,7 @@ negociação suficiente e não repetem empresa.</div>
 <div class="resumo"><b>Em resumo:</b> o risco e o retorno que você escolhe na página da carteira definem o modelo de alocação.
 Nenhum peso é negativo e cada ação respeita um teto.</div>
 <table>
-  <tr><th>Risco ↓ / retorno →</th>{% for k, v in retornos_alvo.items %}<th>{{ k|title }} ({{ v }})</th>{% endfor %}</tr>
+  <tr><th>Risco ↓ / retorno →</th>{% for k, v in retornos_alvo.items %}<th>{{ k }} ({{ v }})</th>{% endfor %}</tr>
   {% for l in matriz %}<tr><td>{{ l.risco }}</td>{% for c in l.celulas %}<td>{{ c }}</td>{% endfor %}</tr>{% endfor %}
 </table>
 <ul>
@@ -233,7 +241,7 @@ Nenhum peso é negativo e cada ação respeita um teto.</div>
 <p>O risco é estimado com três anos de retornos diários e covariância com encolhimento de Ledoit-Wolf, que deixa a estimativa mais
 estável quando há muitas ações e pouco histórico.</p>
 <table>
-  <tr><th>Perfil</th><th class="num">Nº de ações</th><th class="num">Teto por ação</th><th class="num">Perda tolerada em 12 meses</th></tr>
+  <tr><th>Perfil</th><th class="num">Nº de ações</th><th class="num">Teto por ação</th><th class="num">Teto de perda em 12 meses</th></tr>
   {% for p in perfis %}
   <tr><td>{{ p.nome }}</td><td class="num">{{ p.qtd }}</td><td class="num">{{ p.max_pct }}%</td>
       <td class="num">{% if p.perda is None %}sem limite{% else %}{{ p.perda }}%{% endif %}</td></tr>
@@ -244,10 +252,16 @@ estável quando há muitas ações e pouco histórico.</p>
 <section id="renda-fixa">
 <h2>Renda fixa e ações</h2>
 <div class="resumo"><b>Em resumo:</b> as ações escolhidas são as mesmas para todos do perfil; o que muda de pessoa para pessoa é quanto
-fica nelas. A fração em ações é a maior que mantém a perda provável em 12 meses dentro do que você aceitou no questionário.</div>
+fica nelas. A fração em ações é a maior que mantém a perda provável em 12 meses dentro do limite: o <b>menor</b> entre a perda que você
+aceitou no questionário e o teto do seu perfil (tabela acima). Assim um perfil conservador nunca fica com mais de 5% de perda provável,
+mesmo que tenha marcado "mais de 15%".</div>
 <div class="formula">fração em ações = mín(1, perda tolerada ÷ (1,645 × volatilidade anual das ações))</div>
-<p>A renda fixa é pós-fixada (Tesouro Selic ou CDB a 100% do CDI). A ideia é a separação em dois fundos de Tobin: todo investidor combina
-a mesma carteira de ações com o ativo sem risco, e a tolerância ao risco decide só a proporção.</p>
+<p>A renda fixa é pós-fixada (Tesouro Selic ou CDB a 100% do CDI). A ideia vem da separação em dois fundos de Tobin: o investidor combina
+uma carteira de ações com o ativo sem risco, e a tolerância ao risco decide a proporção. Há duas adaptações: cada perfil tem a sua carteira
+de ações (por causa dos filtros e pesos de adequação), e a perda tolerada é tratada como um VaR de 95% com média zero, sem considerar o
+retorno esperado nem as caudas pesadas, uma simplificação conservadora.</p>
+<p>Quando poucas ações passam nos filtros escolhidos (por exemplo, um setor com duas empresas), o teto por ação é mantido e o que sobra
+vai para a renda fixa: com teto de 15% e duas ações, no máximo 30% fica em ações.</p>
 </section>
 
 <section id="validacao">

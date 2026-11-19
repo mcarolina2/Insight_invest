@@ -76,8 +76,12 @@ def login_view(request):
 
 
 def logout_view(request):
-    logout(request)
-    return redirect("users:login")
+    """Sair só por POST (com token CSRF): um link ou imagem em outro site não
+    consegue deslogar o usuário. GET apenas volta para a página inicial."""
+    if request.method == "POST":
+        logout(request)
+        return redirect("users:login")
+    return redirect("core:home")
 
 
 def _perguntas_com_dimensao():

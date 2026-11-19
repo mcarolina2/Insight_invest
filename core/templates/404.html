@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+{% block titulo %}Página não encontrada — Insight Invest{% endblock %}
+{% block conteudo %}
+<div class="card" style="max-width:560px;margin:40px auto;text-align:center">
+  <h1>Página não encontrada</h1>
+  <p class="muted">O endereço não existe, ou o ativo procurado não está na base do Insight Invest (ou foi desativado por não ter negociação na bolsa).</p>
+  <form action="{% url 'core:buscar_ativo' %}" method="get" style="margin:16px 0">
+    <input type="text" name="q" placeholder="Buscar ativo (ex.: PETR4)">
+  </form>
+  <p><a href="{% url 'core:home' %}">Voltar para a página inicial</a></p>
+</div>
+{% endblock %}

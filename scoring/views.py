@@ -36,8 +36,13 @@ def carteira_view(request):
     perfil = perfil_do_usuario(request.user)
     df = calcular_scores_v2(perfil)
     cfg = config_perfil(perfil)
+    from scoring.services.carteira import FILTROS_POR_PERFIL
+    risco_padrao, retorno_padrao = FILTROS_POR_PERFIL.get(perfil, ("medio", "medio"))
     return render(request, "scoring/carteira.html", {
         "perfil": perfil,
+        "risco_padrao": risco_padrao, "retorno_padrao": retorno_padrao,
+        "perfil_nome": {"conservador": "Conservador", "intermediario": "Intermediário",
+                        "arrojado": "Arrojado"}.get(perfil, perfil),
         "setores": _setores_disponiveis(df, perfil),
         "qtd_ativos": cfg["qtd_ativos"],
         "max_pct": int(cfg["max_pct_ativo"] * 100),
@@ -166,7 +171,9 @@ def otimizar_ajax(request):
         "aviso": res["aviso"],
         "fronteira": res["fronteira"],
         "qtd_ativos": res.get("qtd_ativos"),
-        "max_pct": res.get("max_pct"),
+        # teto por ação na carteira completa: com poucas ações o excesso vai para a renda fixa
+        "max_pct": min(res.get("max_pct") or 100,
+                       round(res.get("max_pct", 100) * res.get("teto_acoes", 1.0), 1)),
         "horizonte": horizonte,
     })
 

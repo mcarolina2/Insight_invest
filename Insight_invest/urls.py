@@ -14,8 +14,11 @@ Including another URLconf
     1. Import the include() function: from django.urls import include, path
     2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))
 """
+import os
+
 from django.contrib import admin
 from django.http import HttpResponse
+from django.views.generic import TemplateView
 from django.urls import include, path
 
 admin.site.site_header = "Insight Invest — administração"
@@ -23,10 +26,10 @@ admin.site.site_title = "Insight Invest"
 admin.site.index_title = "Painel do administrador e do analista"
 
 urlpatterns = [
-    path('admin/',    admin.site.urls),
+    path(os.environ.get('ADMIN_URL', 'admin/'), admin.site.urls),   # no Render: ADMIN_URL=um-endereco-dificil/
     path('favicon.ico', lambda r: HttpResponse(status=204)),   # o admin pede este arquivo
+    path('robots.txt', TemplateView.as_view(template_name='robots.txt', content_type='text/plain')),
     path('',          include('core.urls')),
     path('',          include('users.urls')),
     path('carteira/', include('scoring.urls')),
-    path('billing/',  include('billing.urls')),
 ]

@@ -50,6 +50,28 @@ def _f(x, casas=4):
 # Séries da carteira
 # ─────────────────────────────────────────────────────────────────────
 
+def rf_diaria(indice: pd.DatetimeIndex, rf: float | None) -> pd.Series:
+    """Retorno diário da renda fixa em cada pregão, pela Selic meta vigente no
+    dia (KpiMacro). Sem histórico, usa a taxa atual `rf` constante."""
+    constante = pd.Series((1 + (rf or 0.0)) ** (1 / DIAS_UTEIS_ANO) - 1, index=indice)
+    if len(indice) == 0:
+        return constante
+    try:
+        from market_data.models import KpiMacro
+        linhas = list(KpiMacro.objects.exclude(selic__isnull=True)
+                      .filter(data_ref__lte=indice[-1].date())
+                      .order_by("data_ref").values_list("data_ref", "selic"))
+    except Exception:
+        return constante
+    if not linhas:
+        return constante
+    s = pd.Series([float(v) for _, v in linhas], index=pd.to_datetime([d for d, _ in linhas]))
+    s = s[~s.index.duplicated(keep="last")]
+    s = s.reindex(s.index.union(indice)).ffill().reindex(indice)
+    s = s.fillna(float(rf or 0.0) * 100)
+    return (1 + s / 100) ** (1 / DIAS_UTEIS_ANO) - 1
+
+
 def retornos_diarios(precos: pd.DataFrame, pesos_acoes: dict, pct_renda_fixa: float,
                      rf: float) -> tuple[pd.Series, pd.DataFrame]:
     """
@@ -68,7 +90,7 @@ def retornos_diarios(precos: pd.DataFrame, pesos_acoes: dict, pct_renda_fixa: fl
     if total <= 0:
         return pd.Series(dtype=float), r
     w, w_rf = w / total, w_rf / total
-    rf_dia = (1 + (rf or 0.0)) ** (1 / DIAS_UTEIS_ANO) - 1
+    rf_dia = rf_diaria(r.index, rf).values          # Selic de cada dia, não a atual
     carteira = r.values @ w + w_rf * rf_dia
     return pd.Series(carteira, index=r.index, name="carteira"), r
 
@@ -123,8 +145,8 @@ def estatistica_carteira(r: pd.Series, r_ativos: pd.DataFrame, rf: float,
     pico = acumulado.cummax()
     drawdown = acumulado / pico - 1
     semanal = pd.DataFrame({"acum": acumulado, "dd": drawdown}).resample("W").last().dropna()
-    rf_semana = (1 + (rf or 0.0)) ** (1 / 52) - 1
-    so_rf = (1 + rf_semana) ** np.arange(1, len(semanal) + 1)
+    rf_d = rf_diaria(r.index, rf)
+    so_rf = (1 + rf_d).cumprod().resample("W").last().reindex(semanal.index).ffill().values
 
     # Comparações no mesmo calendário e na mesma escala (retorno acumulado)
     series_extra, tabela = {}, [{"id": "carteira", "nome": "Sua carteira", **_metricas_serie(r, rf)}]
@@ -137,8 +159,7 @@ def estatistica_carteira(r: pd.Series, r_ativos: pd.DataFrame, rf: float,
         acc = (1 + rc).cumprod().resample("W").last().reindex(semanal.index).ffill()
         series_extra[chave] = [_f(v - 1, 4) for v in acc]
         tabela.append({"id": chave, "nome": nomes.get(chave, chave), **_metricas_serie(rc, rf)})
-    rf_d = pd.Series((1 + (rf or 0.0)) ** (1 / DIAS_UTEIS_ANO) - 1, index=r.index)
-    tabela.append({"id": "renda_fixa", "nome": "Só renda fixa (Selic atual)", **_metricas_serie(rf_d, rf),
+    tabela.append({"id": "renda_fixa", "nome": "Só renda fixa (Selic de cada dia)", **_metricas_serie(rf_d, rf),
                    "sharpe": None})
 
     pior_dia = r.idxmin()

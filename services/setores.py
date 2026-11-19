@@ -35,12 +35,43 @@ def _holding(setor: str) -> str:
     return f"Holding - {resto}" if resto else "Holding"
 
 
+# Caracteres que só aparecem quando um texto latin-1 (arquivos da CVM) foi lido
+# como cp1250 (padrão de alguns Windows): "Têxtil" vira "Tęxtil".
+# Todos os caracteres em que cp1250 e latin-1 divergem (ex.: "Ă" no lugar de "Ã",
+# o mais comum: "MINERAÇĂO"). Calculado, para não esquecer nenhum à mão.
+_SO_CP1250 = {bytes([b]).decode("cp1250", "ignore") for b in range(0xA0, 0x100)} - \
+             {bytes([b]).decode("latin-1") for b in range(0xA0, 0x100)} - {""}
+
+
+def reparar_mojibake(txt):
+    """'Tęxtil' -> 'Têxtil'. Só altera textos com caracteres típicos do erro."""
+    if not txt or not any(c in _SO_CP1250 for c in str(txt)):
+        return txt
+    try:
+        return str(txt).encode("cp1250").decode("latin-1")
+    except (UnicodeEncodeError, UnicodeDecodeError):
+        return txt
+
+
+# Setores do Yahoo Finance (inglês) -> nomes em português, para ativos sem
+# cadastro na CVM (BDRs, ETFs) não aparecerem com setor em inglês.
+SETORES_YAHOO = {
+    "financial services": "Serviços Financeiros", "financial": "Serviços Financeiros",
+    "utilities": "Utilidade Pública", "energy": "Petróleo, Gás e Energia",
+    "basic materials": "Materiais Básicos", "industrials": "Bens Industriais",
+    "consumer cyclical": "Consumo Cíclico", "consumer defensive": "Consumo não Cíclico",
+    "healthcare": "Saúde", "technology": "Tecnologia da Informação",
+    "communication services": "Comunicações", "real estate": "Imobiliário",
+}
+
+
 def limpar_setor(setor) -> str:
     if setor is None:
         return ""
-    s = str(setor).strip()
+    s = reparar_mojibake(str(setor).strip())
     if s.lower() in ("", "nan", "none"):
         return ""
+    s = SETORES_YAHOO.get(s.lower(), s)
     s = _PREFIXO_NUMERICO.sub("", s)
     if _HOLDING.match(s):
         s = _holding(s)

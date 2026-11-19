@@ -44,12 +44,8 @@ JANELA_TESTE = 63
 CUSTOS_PADRAO = (0.0, 0.001, 0.003)
 COBERTURA_MINIMA = 0.90        # fração de pregões com preço na janela de calibração
 
-# filtros (risco, retorno) usados para cada perfil no backtest
-FILTROS_POR_PERFIL = {
-    "conservador": ("baixo", "baixo"),      # paridade de risco
-    "intermediario": ("medio", "medio"),    # máximo Sharpe com vol <= 20%
-    "arrojado": ("alto", "alto"),           # alocação por escore
-}
+# filtros (risco, retorno) de cada perfil: os mesmos da carteira e da home
+from scoring.services.carteira import FILTROS_POR_PERFIL  # noqa: E402
 
 ESTRATEGIAS = {
     "combinada": "Combinada (3 camadas, AHP)",
@@ -247,14 +243,20 @@ def _selic_diaria(indice: pd.DatetimeIndex) -> pd.Series:
 
 
 def _pesos(candidatos: pd.DataFrame, coluna: str, janela: pd.DataFrame, perfil: str,
-           cfg: dict, rf: float, modelo: str | None) -> pd.Series:
+           cfg: dict, rf: float, modelo: str | None, registro: list | None = None) -> pd.Series:
     risco, retorno = FILTROS_POR_PERFIL.get(perfil, ("medio", "medio"))
+    pretendido = modelo or MODELO_MAP[(risco, retorno)]
     scores = candidatos.set_index("ticker")[coluna]
-    res = otimizar(janela[scores.index], scores, modelo=modelo or MODELO_MAP[(risco, retorno)],
+    res = otimizar(janela[scores.index], scores, modelo=pretendido,
                    w_max=cfg["max_pct_ativo"], retorno_alvo=RETORNO_MAP[retorno],
                    volatilidade_maxima=RISCO_MAP[risco], taxa_livre_risco=rf)
     w = res.pesos[res.pesos > 1e-6]
-    return w / w.sum()
+    w = w / w.sum()
+    if registro is not None:
+        teto = max(cfg["max_pct_ativo"], 1 / max(len(scores), 1))
+        registro.append({"recurso_escore": res.modelo_usado != pretendido,
+                         "n": int(len(w)), "no_teto": int((w >= teto - 1e-4).sum())})
+    return w
 
 
 def _jaccard(a, b) -> float:
@@ -303,7 +305,7 @@ def executar_backtest(precos: pd.DataFrame, perfis=("conservador", "intermediari
         cfg = config_perfil(perfil)
         cfg_sem_macro = {**cfg, "pesos": {**cfg["pesos"], "macro": 0.0}}
         agendas = {e: {} for e in ("combinada", "fundamentalista", "estatistica", "igual")}
-        jaccard_macro, n_cand_macro = [], []
+        jaccard_macro, n_cand_macro, diag_otim = [], [], []
         for n, t in enumerate(decisoes):
             d = datas[t].date()
             janela = precos.iloc[t - janela_cal + 1: t + 1]
@@ -316,7 +318,8 @@ def executar_backtest(precos: pd.DataFrame, perfis=("conservador", "intermediari
                     ok_liq = liq[(liq["volume_financeiro"] >= cfg_django.LIQUIDEZ_MINIMA_DIARIA)
                                  & (liq["pregoes_com_negocio"] >= cfg_django.PREGOES_COM_NEGOCIO_MIN)].index
                     negociaveis &= set(ok_liq)
-            df = calcular_scores_v2(perfil, data_ref=d, estat_externo=estat)
+            # percentis só dentro do universo negociável da data (mesma regra da plataforma)
+            df = calcular_scores_v2(perfil, data_ref=d, estat_externo=estat, universo=negociaveis)
             if df.empty:
                 continue
             df = df[df["ticker"].isin(negociaveis)]
@@ -325,7 +328,8 @@ def executar_backtest(precos: pd.DataFrame, perfis=("conservador", "intermediari
 
             cand = selecionar_candidatos(df, perfil, cfg=cfg)
             if not cand.empty:
-                agendas["combinada"][exec_idx] = _pesos(cand, "score_final", janela, perfil, cfg, rf, modelo)
+                agendas["combinada"][exec_idx] = _pesos(cand, "score_final", janela, perfil, cfg, rf, modelo,
+                                                        registro=diag_otim)
                 agendas["igual"][exec_idx] = pd.Series(1 / len(cand), index=cand["ticker"].values)
 
             for estrategia, coluna in (("fundamentalista", "score_micro"), ("estatistica", "score_estat")):
@@ -335,7 +339,8 @@ def executar_backtest(precos: pd.DataFrame, perfis=("conservador", "intermediari
                     agendas[estrategia][exec_idx] = _pesos(c2, "score_final", janela, perfil, cfg, rf, modelo)
 
             # contribuição da camada macro: mesma seleção, com e sem ela
-            df_sm = calcular_scores_v2(perfil, data_ref=d, cfg=cfg_sem_macro, estat_externo=estat)
+            df_sm = calcular_scores_v2(perfil, data_ref=d, cfg=cfg_sem_macro, estat_externo=estat,
+                                       universo=negociaveis)
             df_sm = df_sm[df_sm["ticker"].isin(negociaveis)]
             c_sm = selecionar_candidatos(df_sm, perfil, cfg=cfg_sem_macro)
             jaccard_macro.append(_jaccard(cand["ticker"] if not cand.empty else [], c_sm["ticker"]))
@@ -358,6 +363,15 @@ def executar_backtest(precos: pd.DataFrame, perfis=("conservador", "intermediari
                                         for k, pesos in ag.items()} for e, ag in agendas.items()},
                       "camada_macro": {"jaccard_medio": float(np.mean(jaccard_macro)) if jaccard_macro else None,
                                        "candidatos_com_e_sem": n_cand_macro},
+                      # carteira combinada: quantas vezes o otimizador recorreu à alocação
+                      # por escore e quantos pesos ficaram no teto por ação
+                      "otimizacao": {
+                          "rebalanceamentos": len(diag_otim),
+                          "recurso_escore": sum(x["recurso_escore"] for x in diag_otim),
+                          "pesos_no_teto_medio": (round(float(np.mean([x["no_teto"] for x in diag_otim])), 2)
+                                                  if diag_otim else None),
+                          "acoes_medio": (round(float(np.mean([x["n"] for x in diag_otim])), 2)
+                                          if diag_otim else None)},
                       "n_ativos_medio": {e: float(np.mean(tj.n_ativos)) for e, tj in traj.items() if tj.n_ativos}}
         for c in custos:
             chave = f"{c:.4f}"

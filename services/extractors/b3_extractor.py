@@ -153,7 +153,9 @@ def buscar_cnpj_cvm():
     print("Baixando CNPJs da CVM...")
     r = requests.get(CVM_URL, headers=HEADERS_CVM, timeout=30)
     r.raise_for_status()
-    df = pd.read_csv(io.StringIO(r.text), sep=";", encoding="latin-1", dtype=str)
+    # r.text usaria a codificação "adivinhada" pelo requests (às vezes cp1250,
+    # que troca "Ã" por "Ă"); o arquivo da CVM é latin-1, então lê os bytes.
+    df = pd.read_csv(io.BytesIO(r.content), sep=";", encoding="latin-1", dtype=str)
     df.columns = [c.strip() for c in df.columns]
     cols = {c.upper(): c for c in df.columns}
     col_cnpj  = cols.get("CNPJ_CIA")

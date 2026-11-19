@@ -16,6 +16,8 @@
       {% if campo.name == 'password1' %}<p class="muted" style="margin-top:-6px">Mínimo de 8 caracteres, não pode ser só números.</p>{% endif %}
     {% endfor %}
     {% for e in form.non_field_errors %}<div class="msg erro">{{ e }}</div>{% endfor %}
+    <p class="muted" style="font-size:12px;margin:8px 0">Guardamos só o usuário, a senha (criptografada) e as respostas do questionário,
+      usadas apenas para montar a sua carteira teórica. <a href="{% url 'core:sobre' %}#privacidade">Aviso de privacidade</a>.</p>
     <button class="btn" type="submit" style="width:100%">Criar conta</button>
   </form>
   <p class="muted" style="margin-top:16px">Já tem conta? <a href="{% url 'users:login' %}">Entrar</a></p>

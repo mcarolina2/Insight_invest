@@ -1,7 +1,7 @@
 {
   "periodo": {
     "inicio": "2021-12-06",
-    "fim": "2026-11-16",
+    "fim": "2026-11-17",
     "rebalanceamentos": 20,
     "janela_calibracao": 504,
     "janela_teste": 63
@@ -43,9 +43,9 @@
       "igual": 8.0
     },
     "intermediario": {
-      "combinada": 9.55,
+      "combinada": 9.35,
       "fundamentalista": 9.45,
-      "estatistica": 9.15,
+      "estatistica": 8.85,
       "igual": 10.0
     },
     "arrojado": {
@@ -53,6 +53,26 @@
       "fundamentalista": 15.0,
       "estatistica": 15.0,
       "igual": 15.0
+    }
+  },
+  "otimizacao_combinada": {
+    "conservador": {
+      "rebalanceamentos": 20,
+      "recurso_escore": 0,
+      "pesos_no_teto_medio": 0.0,
+      "acoes_medio": 8.0
+    },
+    "intermediario": {
+      "rebalanceamentos": 20,
+      "recurso_escore": 11,
+      "pesos_no_teto_medio": 2.0,
+      "acoes_medio": 9.35
+    },
+    "arrojado": {
+      "rebalanceamentos": 20,
+      "recurso_escore": 0,
+      "pesos_no_teto_medio": 0.0,
+      "acoes_medio": 15.0
     }
   }
 }

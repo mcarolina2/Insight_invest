@@ -46,30 +46,17 @@ def ativos_negociaveis():
     IDs dos ativos com negociação suficiente para aparecer nos rankings, ou None
     se ainda não houver indicador estatístico no banco (não filtra).
 
-    Usa o KpiEstatistico mais recente de cada ativo: ter o registro já indica
-    cotação recente; se ele trouxer a liquidez (volume_mediano), exige também o
-    mesmo mínimo da carteira (LIQUIDEZ_MINIMA_DIARIA e PREGOES_COM_NEGOCIO_MIN).
-    Assim ações quase sem negócios (ex.: MNPR3) não aparecem no topo da home.
+    Usa a MESMA regra do escore, da carteira e do backtest
+    (scoring.services.motor_scoring_v2.universo_investivel): histórico de preços
+    na janela e, quando gravada, liquidez mínima. Assim ações quase sem negócios
+    (ex.: MNPR3) não aparecem nos rankings nem na página do ativo como "recomendadas".
     """
-    from django.conf import settings
-    from market_data.models import KpiEstatistico
-    ultimos = (KpiEstatistico.objects
-               .order_by('ativo_id', '-data_calculo')
-               .distinct('ativo_id')
-               .values('ativo_id', 'volume_mediano', 'pregoes_com_negocio'))
-    ultimos = list(ultimos)
-    if not ultimos:
+    from portfolio.models import Ativo
+    from scoring.services.motor_scoring_v2 import universo_investivel
+    universo = universo_investivel()
+    if universo is None:
         return None
-    minimo = float(getattr(settings, 'LIQUIDEZ_MINIMA_DIARIA', 0) or 0)
-    min_pregoes = float(getattr(settings, 'PREGOES_COM_NEGOCIO_MIN', 0) or 0)
-    ids = []
-    for u in ultimos:
-        vol, preg = u['volume_mediano'], u['pregoes_com_negocio']
-        if vol is not None and (float(vol) < minimo or
-                                (preg is not None and float(preg) < min_pregoes)):
-            continue
-        ids.append(u['ativo_id'])
-    return ids
+    return list(Ativo.objects.filter(ticker__in=universo).values_list('id', flat=True))
 
 
 def _normalizar_dy(v):
@@ -207,9 +194,23 @@ def _carteiras_pre_calculadas() -> list[dict]:
         cart = (CarteiraRecomendada.objects.filter(perfil=perfil, ativo=True)
                 .order_by('-data_calculo', '-id').first())
         ativos = cart.composicao if cart else []
+        explicacao = ''
+        if cart:
+            from scoring.services.renda_fixa import PERDA_MAX_POR_PERFIL
+            from scoring.services.motor_scoring_v2 import config_perfil
+            perda = PERDA_MAX_POR_PERFIL.get(perfil)
+            teto = config_perfil(perfil).get('max_pct_ativo', 0) * 100
+            nomes_m = {'risk_parity': 'paridade de risco', 'markowitz': 'Markowitz (mínima variância)',
+                       'sharpe': 'máximo Sharpe', 'score': 'alocação por escore'}
+            explicacao = (f"Modelo: {nomes_m.get(cart.modelo_usado, cart.modelo_usado)}; até {teto:.0f}% "
+                          f"da parte em ações por empresa. " +
+                          (f"Renda fixa para que a perda provável em 12 meses fique em até {perda * 100:.0f}%."
+                           if perda else "Sem limite de perda: tudo em ações."))
         saida.append({
+            "explicacao": explicacao,
             "perfil": perfil, "titulo": titulo, "icone": icone, "cor": cor,
             "ativos": ativos[:ATIVOS_VISIVEIS_HOME],
+            "ativos_todos": ativos,
             "qtd_total": len(ativos),
             "sem_dados": not ativos,
             "metricas": cart.metricas if cart else {},
@@ -229,32 +230,32 @@ def home_view(request):
     from datetime import date, timedelta
 
     # ── Rankings ────────────────────────────────────────────────
-    top_scores = _top_recentes(ScoreAtivo, 'data_calculo', 'score_final', limite=5)
+    # Só a rodada mais recente do calcular_scores: um ativo que deixou de passar
+    # nos filtros não fica no ranking com um escore antigo.
+    ultima = ScoreAtivo.objects.order_by('-data_calculo').values_list('data_calculo', flat=True).first()
+    top_scores = _top_recentes(ScoreAtivo, 'data_calculo', 'score_final',
+                               filtro_extra={'data_calculo': ultima} if ultima else None, limite=5)
     ranking_score = [
         {'posicao': i+1, 'ticker': s.ativo.ticker,
          'setor': s.ativo.setor or '—', 'valor': float(s.score_final)}
         for i, s in enumerate(top_scores)
     ]
 
-    candidatos_dy = _top_recentes(
-        KpiMicro, 'data_ref', 'dy',
-        filtro_extra={'dy__isnull': False, 'dy__gt': 0}, limite=30)
-    ranking_dy = []
-    for k in candidatos_dy:
-        v = _normalizar_dy(k.dy)
-        if v and v <= 30:
-            ranking_dy.append({
-                'posicao': len(ranking_dy)+1,
-                'ticker': k.ativo.ticker,
-                'setor': k.ativo.setor or '—',
-                'valor': v
-            })
-        if len(ranking_dy) == 5:
-            break
+    # Menor volatilidade (12 meses). Substitui o antigo "maior dividend yield":
+    # o DY dependia de preço e proventos de fonte externa sem conferência e
+    # chegava a valores impossíveis; a volatilidade sai das cotações já usadas
+    # no escore estatístico.
+    from market_data.models import KpiEstatistico
+    top_vol = _top_recentes(KpiEstatistico, 'data_calculo', 'volatilidade_anual',
+                            filtro_extra={'volatilidade_anual__gt': 0}, reverso=False, limite=5)
+    ranking_dy = [
+        {'posicao': i+1, 'ticker': k.ativo.ticker, 'setor': k.ativo.setor or '—',
+         'valor': round(float(k.volatilidade_anual) * 100, 1)}
+        for i, k in enumerate(top_vol)
+    ]
 
-    # Maior ROE (antes: "maior liquidez corrente", que tinha teto de 5x e
-    # mostrava várias empresas empatadas em 4,9x). ROE acima de 100% costuma
-    # ser patrimônio líquido muito pequeno, não rentabilidade: fica de fora.
+    # Maior ROE. ROE acima de 100% costuma ser patrimônio líquido muito pequeno,
+    # não rentabilidade: fica de fora.
     top_roe = _top_recentes(
         KpiMicro, 'data_ref', 'roe',
         filtro_extra={"roe__gt": 0, "roe__lte": 1,
@@ -266,19 +267,26 @@ def home_view(request):
         for i, k in enumerate(top_roe)
     ]
 
-    top_div = _top_recentes(
+    # Menor endividamento: dívida líquida/EBITDA, INCLUINDO quem tem caixa
+    # líquido (valor negativo). Para o negativo significar caixa e não EBITDA
+    # negativo, exige-se margem EBITDA positiva. Setor financeiro fica fora
+    # (o indicador não se aplica a bancos e seguradoras).
+    from scoring.services.motor_scoring_v2 import eh_financeiro
+    cand_div = _top_recentes(
         KpiMicro, 'data_ref', 'divida_ebitda',
-        filtro_extra={"divida_ebitda__gt": 0,
-                      "divida_ebitda__lte": 3,
-                      "roe__gt":0, 
-                      "roa__gt":0,},
-        reverso=False, limite=5)
+        filtro_extra={"divida_ebitda__lte": 3, "margem_ebitda__gt": 0,
+                      "roe__gt": 0, "roa__gt": 0},
+        reverso=False, limite=30)
+    top_div = [k for k in cand_div if not eh_financeiro(k.ativo.setor)][:5]
     ranking_div = [
         {'posicao': i+1, 'ticker': k.ativo.ticker,
          'setor': k.ativo.setor or '—',
-         'valor': round(float(k.divida_ebitda), 2)}
+         'valor': round(float(k.divida_ebitda), 2),
+         'caixa_liquido': float(k.divida_ebitda) < 0}
         for i, k in enumerate(top_div)
     ]
+    anos_dfp = sorted({k.data_ref.year for k in list(top_roe) + top_div})
+    ano_dfp = anos_dfp[-1] if anos_dfp else None
 
     ranking_sent = list(
         SentimentoMercado.objects
@@ -299,6 +307,8 @@ def home_view(request):
     from scoring.services.macro import macro_consolidado
     macro = macro_consolidado()
     score_macro = calcular_score_macro(macro) if macro else None
+    from scoring.services.motor_scoring_v2 import componentes_macro
+    macro_partes = componentes_macro(macro) if macro else []
 
     # ── Notícias ─────────────────────────────────────────────────
     noticias_qs = (SentimentoMercado.objects
@@ -330,6 +340,9 @@ def home_view(request):
         'noticias':          noticias,
          'carteiras_coringa': carteiras_coringa,
         'carteiras_json':    carteiras_json,
+        'ano_dfp':           ano_dfp,
+        'data_scores':       ultima,
+        'macro_partes':      macro_partes,
     })
 
 
@@ -375,24 +388,53 @@ def similares_ajax(request, ticker):
 
     return JsonResponse({'similares': resultado, 'setor': ativo.setor or ''})
 
+# Nomes populares que não aparecem na razão social
+APELIDOS = {
+    "itau": ["ITUB4", "ITUB3"], "bradesco": ["BBDC4", "BBDC3"], "banco do brasil": ["BBAS3"], "bb": ["BBAS3"],
+    "santander": ["SANB11"], "btg": ["BPAC11"], "eletrobras": ["ELET3", "ELET6"], "petrobras": ["PETR4", "PETR3"],
+    "vale": ["VALE3"], "ambev": ["ABEV3"], "sabesp": ["SBSP3"], "cemig": ["CMIG4", "CMIG3"],
+    "copel": ["CPLE6", "CPLE3"], "localiza": ["RENT3"], "rumo": ["RAIL3"], "suzano": ["SUZB3"],
+    "csn": ["CSNA3", "CMIN3"], "renner": ["LREN3"], "magalu": ["MGLU3"], "magazine luiza": ["MGLU3"],
+    "rede dor": ["RDOR3"], "engie": ["EGIE3"], "energisa": ["ENGI11"], "equatorial": ["EQTL3"],
+    "weg": ["WEGE3"], "b3": ["B3SA3"], "taesa": ["TAEE11"], "usiminas": ["USIM5"], "multiplan": ["MULT3"],
+}
+
+
+def _sem_acento(txt: str) -> str:
+    import unicodedata
+    return ''.join(c for c in unicodedata.normalize('NFKD', txt or '') if not unicodedata.combining(c)).lower()
+
+
 @require_GET
 def buscar_ativo(request):
-    """Busca por ticker ou nome. Um único resultado abre a página do ativo."""
+    """
+    Busca por ticker, nome (sem diferenciar acentos) ou nome popular ("itau",
+    "eletrobras"). Só redireciona direto quando o termo é exatamente um ticker;
+    sem resultado, sugere tickers parecidos. Ativos inativos não aparecem.
+    """
+    import difflib
     from portfolio.models import Ativo
 
     q = request.GET.get('q', '').strip()
     if not q:
         return redirect('core:home')
 
-    exato = Ativo.objects.filter(ticker__iexact=q).first()
+    ativos = Ativo.objects.filter(ativo=True)
+    exato = ativos.filter(ticker__iexact=q).first()
     if exato:
         return redirect('core:ativo', ticker=exato.ticker)
 
-    resultados = list(Ativo.objects.filter(Q(ticker__icontains=q) | Q(nome__icontains=q))
-                      .order_by('ticker')[:30])
-    if len(resultados) == 1:
-        return redirect('core:ativo', ticker=resultados[0].ticker)
-    return render(request, 'core/busca.html', {'q': q, 'resultados': resultados})
+    termo = _sem_acento(q)
+    por_apelido = APELIDOS.get(termo.replace("'", "").replace("’", ""), [])
+    candidatos = list(ativos.only('id', 'ticker', 'nome', 'setor', 'tipo'))
+    resultados = [a for a in candidatos if a.ticker in por_apelido]
+    resultados += [a for a in candidatos if a not in resultados and
+                   (termo in a.ticker.lower() or termo in _sem_acento(a.nome))]
+    resultados.sort(key=lambda a: (a.ticker not in por_apelido, a.ticker))
+    sugestoes = []
+    if not resultados:
+        sugestoes = difflib.get_close_matches(q.upper(), [a.ticker for a in candidatos], n=5, cutoff=0.6)
+    return render(request, 'core/busca.html', {'q': q, 'resultados': resultados[:30], 'sugestoes': sugestoes})
 
 
 def ativo_view(request, ticker):
@@ -402,7 +444,7 @@ def ativo_view(request, ticker):
     from users.models import perfil_do_usuario
     from core.ativo_info import montar_contexto_ativo
 
-    ativo = get_object_or_404(Ativo, ticker__iexact=ticker)
+    ativo = get_object_or_404(Ativo, ticker__iexact=ticker, ativo=True)
     if ativo.ticker != ticker:
         return redirect('core:ativo', ticker=ativo.ticker)
     perfil = perfil_do_usuario(request.user)
@@ -463,7 +505,8 @@ def metodologia_view(request):
     nomes_modelo = {'risk_parity': 'Paridade de risco', 'markowitz': 'Markowitz (mínima variância)',
                     'sharpe': 'Máximo Sharpe', 'score': 'Alocação por escore'}
     rot_risco = {'baixo': 'Baixo (vol. ≤ 12%)', 'medio': 'Médio (vol. ≤ 20%)', 'alto': 'Alto (sem teto)'}
-    rot_ret = {k: f"{v * 100:.0f}% a.a." for k, v in RETORNO_MAP.items()}
+    nomes_nivel = {'baixo': 'Baixo', 'medio': 'Médio', 'alto': 'Alto'}
+    rot_ret = {nomes_nivel[k]: f"{v * 100:.0f}% a.a." for k, v in RETORNO_MAP.items()}
     matriz = [{'risco': rot_risco[r], 'celulas': [nomes_modelo[MODELO_MAP[(r, t)]] for t in ('baixo', 'medio', 'alto')]}
               for r in ('baixo', 'medio', 'alto')]
     from users.suitability import DIMENSOES, FAIXAS, PERGUNTAS
@@ -495,9 +538,32 @@ def desempenho_view(request):
             dados = json.loads(arq.read_text(encoding='utf-8'))
         except (OSError, ValueError):
             dados = None
+    def _br(txt):
+        """'2021-12-06' ou '2026-11-17T10:00' -> '06/12/2021' / '17/11/2026'."""
+        try:
+            a, m, d = str(txt)[:10].split('-')
+            return f"{d}/{m}/{a}"
+        except (ValueError, TypeError):
+            return txt
+    periodo = dict((dados or {}).get('periodo') or {})
+    for k in ('inicio', 'fim'):
+        if k in periodo:
+            periodo[k] = _br(periodo[k])
     return render(request, 'core/desempenho.html', {
         'dados_json': json.dumps(dados, ensure_ascii=False) if dados else 'null',
         'tem_dados': bool(dados),
-        'periodo': (dados or {}).get('periodo'),
-        'gerado_em': (dados or {}).get('gerado_em'),
+        'periodo': periodo or None,
+        'gerado_em': _br((dados or {}).get('gerado_em')) if dados else None,
+    })
+
+
+def sobre_view(request):
+    """Natureza acadêmica do projeto, autoria, fontes, data-base e privacidade."""
+    from django.db.models import Max
+    from market_data.models import KpiEstatistico, KpiMicro
+    from scoring.models import ScoreAtivo
+    return render(request, 'core/sobre.html', {
+        'data_precos': KpiEstatistico.objects.aggregate(m=Max('data_calculo'))['m'],
+        'data_dfp': KpiMicro.objects.aggregate(m=Max('data_ref'))['m'],
+        'data_scores': ScoreAtivo.objects.aggregate(m=Max('data_calculo'))['m'],
     })

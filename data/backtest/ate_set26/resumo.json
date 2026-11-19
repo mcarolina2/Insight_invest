@@ -1,0 +1,78 @@
+{
+  "periodo": {
+    "inicio": "2021-12-06",
+    "fim": "2026-09-30",
+    "rebalanceamentos": 20,
+    "janela_calibracao": 504,
+    "janela_teste": 63
+  },
+  "hipoteses_custo_0,10%": {
+    "conservador": {
+      "H1": false,
+      "H2": false
+    },
+    "intermediario": {
+      "H1": false,
+      "H2": false
+    },
+    "arrojado": {
+      "H1": false,
+      "H2": false
+    },
+    "H3": {
+      "volatilidade_crescente": false,
+      "drawdown_crescente": true
+    }
+  },
+  "camada_macro": {
+    "conservador": {
+      "jaccard_medio_com_vs_sem_macro": 1.0
+    },
+    "intermediario": {
+      "jaccard_medio_com_vs_sem_macro": 1.0
+    },
+    "arrojado": {
+      "jaccard_medio_com_vs_sem_macro": 1.0
+    }
+  },
+  "n_ativos_medio": {
+    "conservador": {
+      "combinada": 8.0,
+      "fundamentalista": 8.0,
+      "estatistica": 8.0,
+      "igual": 8.0
+    },
+    "intermediario": {
+      "combinada": 9.05,
+      "fundamentalista": 8.9,
+      "estatistica": 8.25,
+      "igual": 10.0
+    },
+    "arrojado": {
+      "combinada": 15.0,
+      "fundamentalista": 15.0,
+      "estatistica": 15.0,
+      "igual": 15.0
+    }
+  },
+  "otimizacao_combinada": {
+    "conservador": {
+      "rebalanceamentos": 20,
+      "recurso_escore": 1,
+      "pesos_no_teto_medio": 0.0,
+      "acoes_medio": 8.0
+    },
+    "intermediario": {
+      "rebalanceamentos": 20,
+      "recurso_escore": 9,
+      "pesos_no_teto_medio": 2.7,
+      "acoes_medio": 9.05
+    },
+    "arrojado": {
+      "rebalanceamentos": 20,
+      "recurso_escore": 0,
+      "pesos_no_teto_medio": 0.0,
+      "acoes_medio": 15.0
+    }
+  }
+}

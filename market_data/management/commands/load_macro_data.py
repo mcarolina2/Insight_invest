@@ -70,6 +70,7 @@ class Command(BaseCommand):
                         "importacoes":        reg.get("importacoes"),
                         "balanca_comercial":  balanca,
                         "desemprego":         reg.get("desemprego"),
+                        "dolar_brl":          reg.get("dolar_brl"),
                     },
                 )
 

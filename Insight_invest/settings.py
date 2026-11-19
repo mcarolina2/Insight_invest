@@ -176,6 +176,11 @@ if not DEBUG:
     SECURE_SSL_REDIRECT = True
     SESSION_COOKIE_SECURE = True
     CSRF_COOKIE_SECURE = True
+    SECURE_HSTS_SECONDS = 60 * 60 * 24 * 30      # 30 dias; aumentar depois de validado
+    SECURE_HSTS_INCLUDE_SUBDOMAINS = False      # onrender.com não é nosso
+    SECURE_CONTENT_TYPE_NOSNIFF = True
+    SECURE_REFERRER_POLICY = 'same-origin'
+    X_FRAME_OPTIONS = 'DENY'
 
 # Insight_invest/settings.py
 LOGIN_URL      = '/login/'        # onde redirecionar quem não está logado

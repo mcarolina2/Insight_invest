@@ -110,6 +110,17 @@ def normalizar_escala(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
+# Bancos e seguradoras publicam a DFP com outro plano de contas: o patrimônio
+# líquido não é a conta 2.03 (é 2.07/2.08) e o lucro do período não é a 3.11
+# (é 3.09). Para esses dois indicadores, a conta é achada pela DESCRIÇÃO no
+# nível 2 (2.xx / 3.xx), o que vale para todos os planos de contas; o código
+# fica como alternativa quando a descrição não for encontrada.
+CONTAS_POR_DESCRICAO = {
+    "patrimonio_liquido": (r"^2\.\d\d$", r"^patrim[oô]nio l[ií]quido"),
+    "lucro_liquido":      (r"^3\.\d\d$", r"lucro.*consolidado do per[ií]odo"),
+}
+
+
 def filtrar_contas(df, contas_interesse):
 
     codigos = list(contas_interesse.keys())
@@ -131,10 +142,27 @@ def filtrar_contas(df, contas_interesse):
         )
     )
 
+    # contas achadas pela descrição (ver CONTAS_POR_DESCRICAO)
+    por_descricao = []
+    if "DS_CONTA" in filtrado.columns:
+        desc = filtrado["DS_CONTA"].astype(str).str.strip().str.lower()
+        for indicador, (padrao_cod, padrao_desc) in CONTAS_POR_DESCRICAO.items():
+            if indicador not in contas_interesse.values():
+                continue
+            m = (filtrado["CD_CONTA"].astype(str).str.match(padrao_cod)
+                 & desc.str.contains(padrao_desc, regex=True))
+            achadas = filtrado[m].copy()
+            achadas["_INDICADOR"] = indicador
+            por_descricao.append(achadas)
+
     # somente contas desejadas
     filtrado = filtrado[
         filtrado["CD_CONTA"].isin(codigos)
     ].copy()
+    filtrado["_INDICADOR"] = filtrado["CD_CONTA"].map(contas_interesse)
+    if por_descricao:
+        # por último, para prevalecer no pivot (aggfunc="last")
+        filtrado = pd.concat([filtrado] + por_descricao, ignore_index=True)
 
     # Escala: a CVM publica VL_CONTA em reais ("UNIDADE") ou em milhares ("MIL"),
     # e a escala pode variar entre empresas e entre anos da MESMA empresa.
@@ -142,7 +170,7 @@ def filtrar_contas(df, contas_interesse):
     # empresa muda de escala (origem de valores como 120.000%).
     filtrado = normalizar_escala(filtrado)
 
-    filtrado["INDICADOR"] = filtrado["CD_CONTA"].map(contas_interesse)
+    filtrado["INDICADOR"] = filtrado["_INDICADOR"]
 
     pivot = filtrado.pivot_table(
         index=["CNPJ_CIA", "DENOM_CIA", "DT_REFER"],
@@ -176,6 +204,42 @@ def extrair_dre(ano: int) -> pd.DataFrame:
     return dre
 
 
+def depreciacao_amortizacao(df_dfc: pd.DataFrame) -> pd.DataFrame:
+    """
+    Depreciação, amortização e exaustão do exercício, lidas da DFC pelo método
+    indireto (linhas de ajuste do grupo 6.01.01 cuja descrição cita
+    depreciação, amortização ou exaustão). O EBITDA não é uma conta da DRE:
+    sem esse ajuste, "EBITDA" seria apenas o resultado operacional (EBIT).
+
+    Retorna CNPJ_CIA, DT_REFER e depreciacao_amortizacao (valor positivo, em reais).
+    Empresas que publicam a DFC pelo método direto não têm essa linha: ficam sem
+    o valor e o EBITDA delas cai para o EBIT (subestimado), o que é documentado.
+    """
+    if df_dfc is None or df_dfc.empty:
+        return pd.DataFrame(columns=["CNPJ_CIA", "DT_REFER", "depreciacao_amortizacao"])
+    d = df_dfc[df_dfc["ORDEM_EXERC"] == "ÚLTIMO"].copy()
+    d = (d.sort_values(["DT_REFER", "VERSAO"])
+          .drop_duplicates(subset=["CNPJ_CIA", "DT_REFER", "CD_CONTA"], keep="last"))
+    desc = d["DS_CONTA"].astype(str).str.lower()
+    alvo = (d["CD_CONTA"].astype(str).str.startswith("6.01.01.")
+            & desc.str.contains("deprecia|amortiza|exaust", regex=True)
+            # evita linhas de "amortização de empréstimos/juros", que são financiamento
+            & ~desc.str.contains("emprést|empr[eé]stimo|financiamento|juros|debênture|arrendamento financeiro", regex=True))
+    d = normalizar_escala(d[alvo])
+    d["VL_CONTA"] = pd.to_numeric(d["VL_CONTA"], errors="coerce").abs()
+    return (d.groupby(["CNPJ_CIA", "DT_REFER"], as_index=False)["VL_CONTA"].sum()
+             .rename(columns={"VL_CONTA": "depreciacao_amortizacao"}))
+
+
+def extrair_dfc(ano: int) -> pd.DataFrame:
+    """Depreciação e amortização do ano (DFC, método indireto)."""
+    try:
+        return depreciacao_amortizacao(baixar_arquivo_cvm("DFC_MI", ano))
+    except Exception as e:                       # arquivo ausente não impede a carga
+        logger.warning(f"DFC de {ano} indisponível: {e}")
+        return pd.DataFrame(columns=["CNPJ_CIA", "DT_REFER", "depreciacao_amortizacao"])
+
+
 def extrair_historico(anos: list[int]) -> tuple[pd.DataFrame, pd.DataFrame]:
     """
     Baixa e consolida BP e DRE para múltiplos anos.
@@ -191,7 +255,11 @@ def extrair_historico(anos: list[int]) -> tuple[pd.DataFrame, pd.DataFrame]:
     for ano in anos:
         try:
             bps.append(extrair_bp(ano))
-            dres.append(extrair_dre(ano))
+            dre = extrair_dre(ano)
+            da = extrair_dfc(ano)
+            if not da.empty:
+                dre = dre.merge(da, on=["CNPJ_CIA", "DT_REFER"], how="left")
+            dres.append(dre)
             logger.info(f"Ano {ano} extraído com sucesso.")
         except Exception as e:
             logger.warning(f"Falha ao extrair ano {ano}: {e}")
